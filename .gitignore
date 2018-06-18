@@ -1,5 +1,7 @@
+.directory
 *.Rproj
 .Rproj.user
 .Rhistory
+*.rda
 .RData
 .Ruserdata
