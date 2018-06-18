@@ -1,0 +1,246 @@
+---
+title: "Lab 1: Nonlinear Regression"
+author: "Maarten van der Velde"
+output: html_notebook
+---
+
+# 1. Preparation
+
+```{r}
+library(mgcv)
+library(itsadug)
+library(dplyr)
+library(ggplot2)
+library(colorspace)
+```
+
+
+## Load data
+
+```{r}
+download.file("http://www.jacolienvanrij.com/Courses/LOT2018/data/LD_RT.rda", "LD_RT.rda")
+load("LD_RT.rda")
+
+str(dat)
+```
+
+### Clean data
+
+```{r}
+d <- dat %>%
+  filter(KEY_RT > 0) %>% # Remove missing key presses (RT below 0)
+  filter(ACC == 1) %>% # Remove incorrect responses
+  droplevels() %>% # Take out empty factor levels
+  arrange(SubID, TRIAL_INDEX) # Sort by subject and trial
+```
+
+
+## Question 1: Inspection of data
+**How many participants are included in this data set?**
+```{r}
+length(unique(d$Subject))
+```
+
+**How many items did they see?**
+```{r}
+table(d$Subject)
+```
+
+**What is the range of correct items per participant?**
+
+```{r}
+dat %>%
+  group_by(Subject) %>%
+  summarise(acc = mean(ACC)) %>%
+  pull(acc) %>%
+  summary()
+```
+
+---
+
+# 2. Visualisation of the data
+
+```{r}
+rt_by_item <- d %>%
+  group_by(StimulusType, Item, WordLength) %>%
+  summarise(meanRT = mean(KEY_RT, na.rm = TRUE),
+         n_subj = n()) 
+
+rt_by_length <- rt_by_item %>%
+  group_by(StimulusType, WordLength) %>%
+  summarise(RT = mean(meanRT, na.rm = TRUE),
+            n_item = n())
+
+range(rt_by_length$n_item)
+```
+Plot of the reaction time averages:
+
+```{r}
+ggplot(rt_by_length, aes(x = WordLength, y = RT, colour = StimulusType)) +
+  ylim(500, 900) +
+  geom_line(lty = 2) +
+  geom_point(aes(pch = StimulusType)) +
+  labs(x = "Word length", y = "RT (ms)", title = "Reaction times") +
+  theme_classic()
+```
+
+Number of items per word-length:
+```{r}
+hist(rt_by_item$WordLength, breaks=0:20, col='gray', main = "Number of items per word length")
+```
+
+Distribution of RT:
+```{r}
+qqnorm(d$KEY_RT)
+qqline(d$KEY_RT)
+```
+
+## Question 2: Data visualisation
+
+**Do you see an effect of the predictor `StimulusType` (word vs pseudowords) on the average RT?**
+
+Yes, pseudowords have a higher average RT.
+
+**Do you see an effect of `WordLength` on the average RT?**
+
+RT looks fairly constant for words with a length between 2 and 12, but then becomes higher/less regular.
+
+**Do you see an interaction between `StimulusType` and `WordLength`?**
+
+No.
+
+**Describe the range and distribution of the predictor `WordLength`.**
+
+```{r}
+summary(d$WordLength)
+```
+
+**Describe what we can infer for the QQ plot of reaction times. What do we need to do before analysis?**
+
+The QQ plot shows that RT is not normally distributed, but heavily skewed to the right (as you would expect with RT).
+We need to transform it so that it is roughly normal.
+
+---
+
+# 3. Analysis
+
+## Question 3: Choosing a transformation
+
+Log-transformed RT is still skewed right:
+```{r}
+qqnorm(log(d$KEY_RT))
+qqline(log(d$KEY_RT))
+```
+
+Inverse RT is much closer to a normal distribution, so we'll use that as the dependent variable in the model:
+```{r}
+d$invRT <- -1000 / d$KEY_RT
+
+qqnorm(d$invRT)
+qqline(d$invRT)
+```
+
+
+## Model 1: effects of word length and stimulus type
+
+**Construct a model that includes the main effects of `StimulusType` and `WordLength`, and their interaction.**
+
+```{r}
+d$StimulusType <- as.factor(d$StimulusType) # gam expects categorical predictors to be coded as factors
+
+m1 <- gam(invRT ~ StimulusType + s(WordLength, by = StimulusType), data = d, method = "ML")
+summary(m1)
+```
+
+## Question 4: Interpretation
+
+**What can you conclude from the summary with respect to the difference between words and nonwords?**
+
+The parametric coefficient `StimulusTypeword` shows that inverse RT is lower when the stimulus is a word, meaning that RT is higher for nonwords than for words. This matches the plot we saw earlier.
+
+**What can you conclude from the summary with respect to the *shape* of the two regression lines?**
+
+When`StimulusType` is `word`, the interaction with `WordLength` has only a single effective degree of freedom, which means it can only be a straight line. Since the F-test is significant, this line has a slope that is significantly different from zero.
+
+When `StimulusType` is `pseudoword`, the interaction with `WordLength` is more complex, since it has about 2 edf. We cannot know the exact shape of the regression curve, but we can say that it is significantly different from a straight horizontal line.
+
+
+Visualise the effects of word length in two different ways:
+```{r}
+# using plot:
+par(mfrow=c(1,2))
+plot(m1, select=1)
+abline(h=0)
+plot(m1, select=2)
+abline(h=0)
+```
+
+```{r}
+# using plot_smooth:
+par(mfrow=c(1,2))
+plot_smooth(m1, view="WordLength", plot_all = "StimulusType")
+```
+
+## Question 5: Visualisation
+
+**Why are the y-values different for the two types of plots? What is the difference between `plot_smooth` and `plot`?**
+
+The difference is that `plot` only shows the partial effects (i.e., just the smooth terms, not the linear terms), whereas `plot_smooth` includes the linear coefficients (intercept and coefficient for `StimulusType`) so that it shows the actual fitted values.
+
+## Model 2: Testing for significance
+
+**Construct a model that includes only the main effects of `StimulusType` and `WordLength`, not their interaction.**
+```{r}
+m2 <- gam(invRT ~ StimulusType + s(WordLength), data = d, method = "ML")
+summary(m2)
+```
+
+## Question 6: Visualisation
+
+**Without having plotted the model estimates, what can you conclude about the estimated regression lines of words and pseudowords based on the summary?**
+
+Looking at the parametric coefficients, we can see that once again words have a lower intercept than nonwords (i.e., overall words have a lower RT than non-words). There is also a significant effect of `WordLength` with about 2 effective degrees of freedom (though we don't know the shape). In this model both stimulus types will have the same regression curve, but with a different intercept.
+
+Compare the two models:
+```{r}
+AIC(m1, m2)
+compareML(m1, m2)
+```
+
+## Question 7: Model comparison
+
+**Inspect the output. Which model is preferred? What is the conclusion?**
+
+The `AIC` comparison shows that the second model (without interaction) has a lower AIC score, which would make it the preferred model.
+The `compareML` comparison shows that the second model only has a very slightly higher ML score (what is this?), and that the difference is not significant. Both tests therefore point towards the simpler model as the preferred model.
+Based on this, we can conclude that the interaction between `WordLength` and `StimulusType` does not contribute to the model.
+
+---
+
+# 4. Extra: checking residuals
+
+The residuals of the simpler model are normally distributed:
+```{r}
+qqnorm(resid(m2))
+qqline(resid(m2))
+```
+
+Check whether the residuals are autocorrelated:
+```{r}
+acf(resid(m2))
+```
+
+Plot residuals to see if there are trends:
+```{r}
+plot(resid(m2))
+```
+
+```{r}
+plot(fitted(m2), resid(m2))
+```
+
+## Question 8: Residuals
+
+**What do these plots tell you about the residuals? Do you see problems?**
+
+The residuals are roughly normally distributed and are fairly evenly spread around zero for all fitted values. They are however quite consistently autocorrelated (r $\approx$ 0.2), which could be a problem.
