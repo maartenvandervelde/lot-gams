@@ -90,18 +90,17 @@ legend('topright', legend=c("R - SAME", "L - SAME", "R - DIFFERENT", "L - DIFFER
 
 **Do we use gam or bam?**
 ```{r}
-nrow(dat)
 dim(dat)
 ```
 
 Given the size of the data set, we use bam.
 
-Model the mouse trajectories (as quantified in distance from the target) as predicted by time, modulated by the location of the "same" answer on screen, and the answer that is given.
+Model the mouse trajectories (quantified in distance from the target) as predicted by `Time`, modulated by the location of the "same" answer on screen, and the answer that is given.
 ```{r}
 d <- d %>%
   mutate(location.same = as.factor(location.same), # Ensure that the predictors are coded as factors
          answer = as.factor(answer),
-         loc_ans_interaction = interaction(location.same, answer))
+         loc_ans_interaction = interaction(location.same, answer)) # Hardcode interaction between predictors (cannot be done automatically)
 
 m1 <- bam(dist.target ~ loc_ans_interaction + s(Time, by = loc_ans_interaction), data = d, method = "fREML", discrete = TRUE)
 summary(m1)
@@ -110,6 +109,153 @@ summary(m1)
 
 Plot the summed effects:
 ```{r}
-plot_smooth(m1, view = "Time", plot_all = "interaction")
+plot_smooth(m1, view = "Time", plot_all = "loc_ans_interaction")
 ```
 
+
+Plot the difference between answering "same" on the left and answering "same" on the right:
+```{r}
+plot_diff(m1, view = "Time", comp = list(loc_ans_interaction = c("R.SAME", "L.SAME")))
+```
+According to the model, participants initially move their mouse to the target slightly faster when answering "same" on the right than when answering "same" on the left, but this pattern reverses later on. In any case, the effect remains very small.
+
+
+Plot the difference between answering "different" on the left and answering "different" on the right:
+```{r}
+plot_diff(m1, view = "Time", comp = list(loc_ans_interaction = c("R.DIFFERENT", "L.DIFFERENT")))
+```
+Here the difference between left and right is much more pronounced. Participants move to the target much more quickly when answering "different" on the right than when answering "different" on the left.
+
+It seems like the right "different" response in particular is primed, rather than the "different" response or the right response in general.
+
+To confirm, plot the difference between answering "different" on the right and "same" on the right:
+```{r}
+plot_diff(m1, view = "Time", comp = list(loc_ans_interaction = c("R.DIFFERENT", "R.SAME")))
+```
+
+This plot confirms that responding on the right is not necessarily primed, but specifically the "different" response.
+
+Finally, we can plot the difference between responses on the left:
+```{r}
+plot_diff(m1, view = "Time", comp = list(loc_ans_interaction = c("L.DIFFERENT", "L.SAME")))
+```
+
+Interestingly, responses on the left seem to follow the opposite pattern from responses on the right: here participants move to the target more quickly when responding "same" than when responding "different".
+
+## Question 3: Difference plots
+
+According to the model, there are some significant differences between the trajectories.
+Participants move to the target at different rates, depending on the combination of its location and the answer (see the comparisons above).
+
+---
+
+# 4. Model 2: random intercepts
+
+Add random intercepts for subjects and items to the existing model:
+```{r}
+d <- d %>%
+  mutate(subject = as.factor(subject), # Ensure that subject and item are treated as categorical, not numerical
+         item = as.factor(item))
+
+m2 <- bam(dist.target ~ loc_ans_interaction + s(Time, by = loc_ans_interaction) + s(subject, bs = "re") + s(item, bs = "re"), data = d, method = "fREML", discrete = TRUE)
+summary(m2)
+```
+
+Plot the summed (fixed) effects, leaving out the random effects:
+```{r}
+plot_smooth(m2, view = "Time", plot_all = "loc_ans_interaction", rm.ranef = TRUE)
+```
+
+Plot the (fixed effects) difference between "same" responses on the left and on the right:
+```{r}
+plot_diff(m2, view = "Time", comp = list(loc_ans_interaction = c("R.SAME", "L.SAME")), rm.ranef = TRUE)
+```
+
+
+## Question 4: Random intercepts
+
+**Why would the edfs for the random effects be such large numbers?**
+
+There are 33 participants and 64 unique items (so these factors have 32 and 63 degrees of freedom, respectively), so it makes sense that the random intercept terms for each of these have an edf close to this number, minus one for the fixed intercept.
+
+**What is the effect of including random intercepts on the model estimates for the trajectories**
+
+Most importantly, when accounting for baseline differences between subjects and items by adding random intercepts, the difference between right and left "same" responses is no longer significant.
+
+In general, the estimated trajectories are less distinguishable from each other and confidence intervals are much wider.
+
+
+**Inspect the subject random effects. What do the positive/negative values mean?**
+```{r}
+plot(m2, select = 5)
+```
+
+Each point represents the random intercept of a particular subject.
+Points with a negative value represent subjects whose average target distance is below the grand average (i.e., these subjects move to the target relatively quickly compared to others). Positive values are for subjects whose average distance to the target is above the grand average (i.e., they move to the target comparatively slowly).
+
+---
+
+# 5. Model 3: random slopes
+
+Add random intercepts and slopes (over time) for subjects and items to the existing model:
+```{r}
+m3 <- bam(dist.target ~ loc_ans_interaction + s(Time, by = loc_ans_interaction) + s(subject, bs = "re") + s(item, bs = "re") + s(Time, subject, bs = "re") + s(Time, item, bs = "re"), data = d, method = "fREML", discrete = TRUE)
+summary(m3)
+```
+
+```{r}
+plot_smooth(m3, view = "Time", plot_all = "loc_ans_interaction", rm.ranef = TRUE)
+```
+
+## Question 5: Random slopes
+
+**Do the random slopes contribute significantly?**
+
+According to the F-tests, both slopes are significant predictors. A chi-square comparison of this model to the one without random slopes confirms that the random slopes improve the model fit:
+```{r}
+compareML(m2,m3)
+```
+
+**Inspect the subject random slopes. What do the positive/negative values mean?**
+
+```{r}
+plot(m3, select = 7)
+```
+
+Each point represents a single subject. Positive values indicate that the subject has a steeper slope than the average slope among subjects (i.e., the effect of time on distance from target is stronger in this subject), while a negative value means that a subject's slope is less steep (i.e., in this subject, the effect of time is weaker than average).
+
+---
+
+# 6. Model 4: random factor smooths
+
+Instead of random intercepts and slopes, add random factor smooths for subjects and items.
+```{r}
+m4 <- bam(dist.target ~ loc_ans_interaction + s(Time, by = loc_ans_interaction) + s(Time, subject, bs = "fs", m = 1) + s(Time, item, bs = "fs", m = 1), data = d, method = "fREML", discrete = TRUE)
+
+summary(m4)
+```
+
+Inspect the random factor smooth estimates for subjects:
+```{r}
+plot(m4, select = 5)
+```
+
+Inspect the random factor smooth estimates for items:
+```{r}
+plot(m4, select = 6)
+```
+
+## Question 6: factor smooths
+
+**Why do we not combine the random factor smooths with the random effects smooths?**
+
+The random factor smooths are a non-linear form of the random intercept and slope. If a subject has a higher intercept, the exact same effect can be included in the random factor smooth. Therefore it does not make sense to include both types of random effect at the same time.
+
+**Would random intercepts and slopes be able to account for the patterns in the random factor smooths?**
+
+In the case of the subjects: definitely not, since the random factor smooths are quite non-linear and do not look very uniform.
+In the case of the items: possibly. The random factor smooths for the items are much closer to a horizontal line and do not show as much variation as the subject smooths. (This makes sense: whereas you would expect an individual subject to consistently move the mouse in a particular way, you would not expect an individual item to elicit a specific deviant mouse trajectory).
+
+**Why is there more variation in the random factor smooths in the middle of the smooths?**
+
+The smooths are constrained at both ends: at t = 0, the mouse is always centered at the bottom of the screen; at t = 100, the mouse is always located on the target (although there does seem to be some variability in where subjects click the target). The path between the starting point and the target is less constrained, so that is where differences emerge.
