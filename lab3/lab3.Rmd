@@ -50,7 +50,7 @@ summary(m2)
 ```
 
 ```{r}
-plot_smooth(m2, view = "Time")
+plot_smooth(m2, view = "Time", plot_all = "StimType")
 ```
 
 Look at residuals
