@@ -1,0 +1,69 @@
+---
+title: "Lab 3: Model criticism and model selection"
+author: "Maarten van der Velde"
+output: html_notebook
+---
+
+# 1. Preparation
+```{r}
+library(mgcv)
+library(itsadug)
+library(plyr)
+library(dplyr)
+library(colorspace)
+```
+
+
+Load data
+```{r}
+download.file("http://www.jacolienvanrij.com/Courses/LOT2018/data/dat_subset.rda", "dat_subset.rda")
+load("dat_subset.rda")
+```
+Order data
+```{r}
+dat <- dat %>%
+  arrange(Subject, TRIAL_INDEX, Time)
+```
+
+
+Make factors
+```{r}
+dat$StimType <- as.factor(dat$StimType)
+```
+
+
+Modeling
+```{r}
+m1 <- bam(Pupil ~ StimType + s(Time, by = StimType), data = dat, method = "fREML", discrete = TRUE)
+summary(m1)
+```
+
+```{r}
+plot_smooth(m1, view = "Time", plot_all = "StimType")
+```
+
+Add subject-specific time smooth:
+```{r}
+m2 <- bam(Pupil ~ StimType + s(Time, by = StimType) + s(Time, Subject, bs = "fs", m = 1), data = dat, method = "fREML", discrete = TRUE)
+summary(m2)
+
+```
+
+```{r}
+plot_smooth(m2, view = "Time")
+```
+
+Look at residuals
+```{r}
+qqnorm(resid(m2))
+qqline(resid(m2))
+```
+
+Look at ACF
+```{r}
+acf(resid(m2))
+```
+
+Does not look good. One solution is to include an AR1 model...
+
+Cliffhanger!
