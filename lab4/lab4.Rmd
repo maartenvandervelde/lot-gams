@@ -1,0 +1,153 @@
+---
+title: "Lab 4: "
+author: "Maarten van der Velde"
+output: html_notebook
+---
+
+# 1. Preparation
+```{r}
+library(mgcv)
+library(itsadug)
+library(plyr)
+library(dplyr)
+library(colorspace)
+```
+
+
+
+Load data
+```{r}
+download.file("http://www.jacolienvanrij.com/Courses/LOT2018/data/dat_subset.rda", "dat_subset.rda")
+load("dat_subset.rda")
+
+head(dat)
+str(dat)
+summary(dat$Time)
+```
+
+Convert to factors
+```{r}
+dat <- dat %>%
+  mutate(StimType = as.factor(StimType))
+```
+
+
+
+## Nonlinear interaction using `ti()`
+
+```{r}
+m2 <- bam(Pupil ~ StimType + s(Time, by=StimType)
+          + s(Time, Subject, bs='fs', m=1)
+          + s(Time, Item, bs='fs', m=1), data=dat, discrete = TRUE)
+summary(m2)
+```
+
+
+Include the predictor `wordLength` and the interaction between `Time` and `wordLength`.
+```{r}
+m3 <- bam(Pupil ~ StimType +
+            s(wordLength, by = StimType) + 
+            s(Time, by = StimType) +
+            ti(wordLength, Time, by = StimType) +
+            s(Time, Subject, bs='fs', m=1) +
+            s(Time, Item, bs='fs', m=1), 
+          data=dat, discrete = TRUE)
+summary(m3)
+```
+
+## Question 1: nonlinear interactions
+
+**Does the nonlinear interaction contribute to the model?**
+
+Yes. The interaction is a signifant effect and the model explains more of the variance in the data.
+
+## Visualising nonlinear interactions
+
+
+```{r}
+pvisgam(m3, view=c("Time", "wordLength"), select=4, color=terrain_hcl(50))
+abline(v=0, lty=3)
+```
+
+```{r}
+fvisgam(m3, view=c("Time", "wordLength"), rm.ranef=TRUE, color=terrain_hcl(50))
+abline(v=0, lty=3)
+```
+
+## Question 2: visualising nonlinear interactions
+
+**What is the difference between the two functions?**
+
+`pvisgam` plots the partial effects, in this case we only see the effect of the time smooth for 'word' stimuli. It shows that the pupil size increases over time.
+
+`fvisgam` plots the summed fitted effects (i.e., the actual model prediction). If not specified, it just chooses a level for each factor (here `StimType` is set to pseudoword). Random effects can be included or not (here they are excluded).
+
+
+## Nonlinear interactions using `te()`
+
+We can replace the separate smooths and `ti()` term with a single `te()` term.
+For simplicity, ignore the `StimType` predictor for now.
+
+```{r}
+m4a <- bam(Pupil ~ s(Time) + s(wordLength) + ti(Time, wordLength)
+          + s(Time, Subject, bs='fs', m=1)
+          + s(Time, Item, bs='fs', m=1), data=dat, discrete = TRUE, nthreads = 3)
+
+m4b <- bam(Pupil ~ te(Time, wordLength)
+          + s(Time, Subject, bs='fs', m=1)
+          + s(Time, Item, bs='fs', m=1), data=dat, discrete = TRUE, nthreads = 3)
+
+summary(m4a)
+summary(m4b)
+```
+
+Although the models are comparable, they are not identical, as the plotted estimates show.
+The `te()` version of the model is noticeably smoother, since it has fewer degrees of freedom to work with. In this case that might actually be a good thing, since the less constrained model predicts an effect of word length on pupil size before the word has even appeared, which should not be possible.
+
+```{r}
+par(mfrow=c(1,2))
+
+fvisgam(m4a, view=c("Time", "wordLength"), rm.ranef=TRUE, color=terrain_hcl(50))
+abline(v=0, lty=3)
+
+fvisgam(m4b, view=c("Time", "wordLength"), rm.ranef=TRUE, color=terrain_hcl(50))
+abline(v=0, lty=3)
+```
+
+## Question 3: `ti()` vs `te()`
+
+**Translate `StimType + te(Time, wordLength, by=StimType)` to a comparable model formula with `ti` and `s`.**
+
+`StimType + s(Time, by = StimType) + s(wordLength, by = StimType) + ti(Time, wordLength, by StimType)`
+
+## Nonlinear interaction using `s()`
+
+`s()` is used when the interacting predictors are isotropic (measured on the same scale and dimension).
+
+Include a nonlinear interaction between gaze x and y coordinates:
+```{r}
+m5 <- bam(Pupil ~ StimType + s(Time, by=StimType) + s(wordLength)
+          + ti(Time, wordLength)
+          + s(median_GAZE_X, median_GAZE_Y)
+          + s(Time, Subject, bs='fs', m=1)
+          + s(Time, Item, bs='fs', m=1), data=dat, discrete = TRUE, nthreads = 4)
+
+summary(m5)
+```
+
+Inspect the effect of gaze position on pupil size by visualising the partial effect:
+```{r}
+pvisgam(m5, view=c("median_GAZE_X", "median_GAZE_Y"), select=5, color=terrain_hcl(50))
+points(dat$median_GAZE_X, dat$median_GAZE_Y)
+```
+
+## Question 4: Gaze position
+
+**Describe the effect of gaze position on pupil size.**
+
+It is not clear what the coordinate system is (is (0,0) the start of the word, the center of the screen, or something else?). Nevertheless we can see a fairly strong effect of the y-coordinate on pupil size: as participants look towards the top of the screen, their pupil becomes smaller. There is possibly also a weak interaction with the x-coordinate, which is especially visible when participants look towards the right of the screen.
+
+**What is your conclusion? Do you see any problems?**
+
+Aside from the issue that we don't know what the coordinates mean, the variation in pupil size is extremely big and occurs largely in one direction (vertically), which is suspicious.
+
