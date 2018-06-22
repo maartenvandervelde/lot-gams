@@ -19,51 +19,287 @@ Load data
 download.file("http://www.jacolienvanrij.com/Courses/LOT2018/data/dat_subset.rda", "dat_subset.rda")
 load("dat_subset.rda")
 ```
-Order data
+Order the data:
 ```{r}
 dat <- dat %>%
   arrange(Subject, TRIAL_INDEX, Time)
 ```
 
 
-Make factors
+Make `StimType` a factor, so that it is treated as a categorical predictor:
 ```{r}
 dat$StimType <- as.factor(dat$StimType)
 ```
 
 
-Modeling
+Inspect the data:
 ```{r}
-m1 <- bam(Pupil ~ StimType + s(Time, by = StimType), data = dat, method = "fREML", discrete = TRUE)
+str(dat)
+head(dat)
+```
+
+Check that all participants did 25 trials:
+```{r}
+dat %>%
+  group_by(Subject) %>%
+  summarise(trials = length(unique(TRIAL_INDEX))) %>%
+  arrange(trials)
+```
+
+## Question 1: Inspection of data
+
+**How many participants?**
+
+```{r}
+length(unique(dat$Subject))
+```
+
+**How many trials per participant?**
+
+25 (see above).
+
+---
+
+# 2. Visualisation of the data
+
+We are interested in the difference in pupil size time course between words and pseudowords.
+The grand averages are plotted below. The two curves look very similar. 
+```{r}
+dat$Timebin <- (floor(dat$Time / 100)+.5) *100
+subj <- ddply(dat, c("Timebin", "StimType", "Subject"), summarise,
+             medianPupil = median(Pupil, na.rm=TRUE))
+avg <- ddply(subj, c("Timebin", "StimType"), summarise,
+             Pupil = mean(medianPupil, na.rm=TRUE),
+             se    = se(medianPupil, na.rm = TRUE))
+
+emptyPlot(range(avg$Timebin), range(avg$Pupil), h0=0, v0=0)
+with(avg[avg$StimType=="pseudoword",], plot_error(Timebin, Pupil, se, col=2, shade=TRUE, xpd=TRUE))
+with(avg[avg$StimType=="word",],  plot_error(Timebin, Pupil, se, col=1, shade=TRUE, xpd=TRUE))
+```
+
+
+---
+
+
+# 3. Simple model
+
+We start with a (too) simple model, only including `StimType` and `Time` as predictors.
+
+```{r}
+m1 <- bam(Pupil ~ StimType + s(Time, by = StimType), data = dat, discrete = TRUE, nthreads = 7)
 summary(m1)
 ```
 
+The fitted values for both stimulus types are plotted below. The confidence intervals are suspiciously small (the model is overconfident) since we did not include any random effects to account for variance in participants, items, and individual trajectories.
 ```{r}
 plot_smooth(m1, view = "Time", plot_all = "StimType")
 ```
 
-Add subject-specific time smooth:
+
+The residuals also show problems.
+They have heavy tails on both ends:
 ```{r}
-m2 <- bam(Pupil ~ StimType + s(Time, by = StimType) + s(Time, Subject, bs = "fs", m = 1), data = dat, method = "fREML", discrete = TRUE)
+qqnorm(resid(m1))
+qqline(resid(m1))
+```
+
+They are strongly autocorrelated (since we did not yet account for random effects such as within-subject regularities):
+```{r}
+acf(resid(m1))
+```
+
+We can see some obvious patterns in the residuals that the model should explain:
+```{r}
+plot(resid(m1) ~ fitted(m1))
+```
+
+## Question 2: Inspection of residuals
+
+**What does the QQ norm plot check? Are the assumptions met?**
+
+This plot checks whether the residuals follow a normal distribution (the assumption of normality).
+In this case, the answer is no: although the shape of the distribution is quite symmetrical, the tails are much heavier than would be expected.
+
+**What does the ACF plot check? What do you conclude?**
+
+This plot shows the degree of autocorrelation in the residuals. The height of each line represents the correlation between the residuals and the lagged residuals.
+In this case, the degree of autocorrelation is ectremely high and quite regular. We assume the residuals to be independent of one another, but here the value of one residual is almost perfectly correlated with the value of the next residual.
+This means that there are strong regularities in the residuals that the model has not accounted for, which is not good.
+The most obvious way to reduce autocorrelation is to add random effects to the model.
+
+**What does the last plot check?**
+
+The residuals vs. fitted plot primarily checks whether the variance of the residuals is constant over fitted means (assumption of homoskedacity).
+In this case that assumption seems to hold, which is good.
+That said, this plot also shows that there are unexpected regularities in the residuals, which is definitely a problem.
+
+---
+
+# 4. Setting up random effects structure
+
+To improve the model fit, we will include random effects for participants and items.
+We do not expect these effects to be linear, since the pupil dilation time series do not differ at the start (as each trial is baselined at the onset of the trial) but show large variation later on. Therefore we fit these random effects with random factor smooths.
+
+```{r}
+dat$Subject <- as.factor(dat$Subject)
+dat$Item <- as.factor(dat$Item)
+
+m2 <- bam(Pupil ~ StimType + s(Time, by = StimType) +
+            s(Time, Subject, bs = "fs", m = 1) +
+            s(Time, Item, bs = "fs", m = 1),
+          data = dat,
+          discrete = TRUE,
+          nthreads = 7)
 summary(m2)
-
 ```
 
+The plot below shows the summed fixed effects (random effects are not shown):
 ```{r}
-plot_smooth(m2, view = "Time", plot_all = "StimType")
+plot_smooth(m2, view = "Time", plot_all = "StimType", rm.ranef = TRUE)
 ```
 
-Look at residuals
+The plot below shows the summed effects including random effects (plotted for subject 002_ld and item 171):
+```{r}
+plot_smooth(m2, view = "Time", plot_all = "StimType", rm.ranef = FALSE)
+```
+
+
+## Question 3: Visualisation of the summed effects
+
+**How does the argument `rm.ranef` change the plot?**
+
+This argument determines whether the random effects are added to the summed predictions or not.
+If the random effects are excluded, the plotted values are simply the summed fixed effects (for the "average" subject/item).
+When we include the random effects (in this model: random factor smooths for subject over time and item over time) the plot function chooses a level of each effect (unless we explicitly ask it to plot all levels separately) and plots the resulting summed effects, including random effects.
+
+**Why are the confidence intervals so much wider in the model with random effects?**
+
+The previous model, without random effects, was overconfident, since it did not account for within-subject/item regularities.
+The random effects for subjects and items now explain much of these regularities, which means that the fixed predictors are suddenly less informative than they first appeared to be.
+
+The residuals still deviate heavily from normality:
 ```{r}
 qqnorm(resid(m2))
 qqline(resid(m2))
 ```
 
-Look at ACF
+The addition of random effects should reduce autocorrelation in the residuals, but there is not much improvement:
 ```{r}
 acf(resid(m2))
 ```
 
-Does not look good. One solution is to include an AR1 model...
+The residuals vs. fitted plot still contains some obvious patterns. There is also some evidence of heteroskedacity here: residuals are relatively small for smaller fited values.
+```{r}
+plot(resid(m2) ~ fitted(m2))
+```
 
-Cliffhanger!
+
+## Model with random factor smooth for all participant/trial combinations
+
+The `Event` variable has a unique value for all participant/trial combinations. 
+
+```{r}
+dat$Event <- as.factor(dat$Event)
+length(levels(dat$Event))
+```
+
+```{r}
+if(!file.exists("m3.rda")) {
+  m3 <- bam(Pupil ~ StimType + s(Time, by=StimType)
+            + s(Time, Event, bs='fs', m=1), data=dat, discrete = TRUE, nthreads = 7)
+  m3.sum <- summary(m3)
+  save(m3, m3.sum, file='m3.rda', compress="xz")
+
+} else {
+  load("m3.rda")
+}
+```
+
+Compare the model fit of this model to the simpler model with separate random factor smooths (the plot shows the fit on three random trials):
+```{r}
+par(mfrow=c(1,2))
+
+set.seed(12)
+plot_modelfit(m2, view="Time", event=dat$Event)
+
+set.seed(12)
+plot_modelfit(m3, view="Time", event='Event')
+```
+
+It is clear that the trial-level random factor smooth has really improved the model's ability to fit individual trials.
+This is especially visible for the trial in which the pupil shrinks, which the more complex model fits quite well, whereas the simpler model fits only part of the curve.
+
+Once again, we check the residuals.
+There are still problems: the residuals have heavy tails, are still somewhat autocorrelated, and have slightly unequal variance across fitted means.
+```{r}
+par(mfrow = c(1,3))
+
+qqnorm(resid(m3))
+qqline(resid(m3))
+
+acf(resid(m3))
+
+plot(resid(m3) ~ fitted(m3))
+```
+
+
+# 5. Including AR1 model
+
+When it is not possible to include all unique time series in a factor smooth (as we did in model 3) and we need to accept the unaccounted for structure in the residuals, we can include an AR1 model (the simplest case of the AR($\rho$) model).
+
+Mark the start of each time series:
+```{r}
+dat <- dat %>%
+  arrange(Subject, TRIAL_INDEX, Time) %>%
+  start_event(order = FALSE)
+```
+
+Estimate $\rho$ (this function returns the lag 1 value from the residual autocorrelations):
+```{r}
+rho1 <- start_value_rho(m2)
+rho1
+```
+
+Rerun the model with AR1:
+```{r}
+m2rho <- bam(Pupil ~ StimType + s(Time, by = StimType) +
+               s(Time, Subject, bs = "fs", m = 1) +
+               s(Time, Item, bs = "fs", m = 1),
+             data = dat,
+             discrete = TRUE,
+             nthreads = 7,
+             AR.start = dat$start.event,
+             rho = rho1)
+summary(m2rho)
+```
+
+
+## Question 4: Visualisation of the summed effects
+
+**Compare the summed effects estimates for `m2`, `m3`, and `m2rho`.**
+
+```{r}
+par(mfrow = c(1,3))
+plot_smooth(m2, view = "Time", plot_all = "StimType", rm.ranef = TRUE, main = "m2")
+plot_smooth(m2rho, view = "Time", plot_all = "StimType", rm.ranef = TRUE, main = "m2rho")
+plot_smooth(m3, view = "Time", plot_all = "StimType", rm.ranef = TRUE, main = "m3")
+```
+
+
+**How does the `Event` factor smooth change the model estimates?**
+
+The third plot (the model with random factor smooths for each participant/item combination) shows a "wigglier" estimate of pupil dilation over time that also has narrower confidence intervals than the other models.
+
+**Does the AR1 model change the model's estimates?**
+
+The first two plots show that the added AR1 model increases the uncertainty about the summed effects, but that the shape of the estimates stays more or less the same.
+
+
+**Visualise the autocorrelation with `acf_resid()`. What do you conclude?**
+
+```{r}
+acf_resid((m2rho))
+```
+
+The autocorrelation has been sufficiently accounted for with the AR1 model. The ACF plot shows no more problematic autocorrelation.
+
