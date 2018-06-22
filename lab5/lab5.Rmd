@@ -1,0 +1,131 @@
+---
+title: "Lab 5: Logistic Regression"
+author: "Maarten van der Velde"
+output: html_notebook
+---
+
+# 1. Preparation
+```{r}
+library(mgcv)
+library(itsadug)
+library(plyr)
+library(dplyr)
+library(colorspace)
+```
+
+Download data
+```{r}
+download.file("http://www.jacolienvanrij.com/Courses/LOT2018/data/dat_gaze.rda", "dat_gaze.rda")
+load("dat_gaze.rda")
+
+head(dat)
+str(dat)
+summary(dat$Time)
+```
+
+Select 2000 ms window:
+```{r}
+dat <- droplevels(dat[dat$Time > -500 & dat$Time < 2000,])
+```
+
+
+## Question 1: Relation proportion and logit
+
+**How do positive logit values relate to proportions**
+
+Proportions greater than 0.5 have a positive logit value.
+
+**What value does logit value 0 translate to?**
+
+0.5
+
+**Advantage of logit scale over proportion scale?**
+
+It is not truncated on either side, unlike a proportion scale, which is limited at 0 and 1.
+
+
+# 2. Visualisation
+```{r}
+avg <- ddply(dat, c("Time", "verb_type"), summarise,
+      IA_1 = sum(IA_1_C)/ sum(NSamples),
+      IA_2 = sum(IA_2_C)/ sum(NSamples),
+      IA_3 = sum(IA_3_C)/ sum(NSamples),
+      IA_4 = sum(IA_4_C)/ sum(NSamples))
+
+emptyPlot(c(0,2000), c(0,.5), v0=0,
+          xlab="Time (ms)", ylab="Proportion",
+          main="Gaze during sentence\nRestricting Verb")
+with(avg[avg$verb_type=="Restricting",], lines(Time, IA_1, col=1, lwd=2) )
+with(avg[avg$verb_type=="Restricting",], lines(Time, IA_2, col=2, lwd=2) )
+with(avg[avg$verb_type=="Restricting",], lines(Time, IA_3, col=3, lwd=2) )
+with(avg[avg$verb_type=="Restricting",], lines(Time, IA_4, col=4, lwd=2) )
+
+legend('topleft', legend=c("Target"), col=1, lwd=2, bty='n')
+
+
+emptyPlot(c(0,2000), c(0,.5), v0=0,
+          xlab="Time (ms)", ylab="Proportion",
+          main="Gaze during sentence\nNonRestricting Verb")
+with(avg[avg$verb_type=="NonRestricting",], lines(Time, IA_1, col=1, lwd=2) )
+with(avg[avg$verb_type=="NonRestricting",], lines(Time, IA_2, col=2, lwd=2) )
+with(avg[avg$verb_type=="NonRestricting",], lines(Time, IA_3, col=3, lwd=2) )
+with(avg[avg$verb_type=="NonRestricting",], lines(Time, IA_4, col=4, lwd=2) )
+
+
+legend('topleft', legend=c("Target"), col=1, lwd=2, bty='n')
+```
+
+# 3. Start analysis
+
+```{r}
+dat$Target <- with(dat, cbind(IA_1_C, NSamples)) # make 2d column (why?!?) to store both area of interest 1 fixation count (IA_1_C) and the total number of samples in that time step.
+dat$Distractor2 <- with(dat, cbind(IA_2_C, NSamples))
+
+dat$verb_type <- as.factor(dat$verb_type) # gams expects factor
+```
+
+```{r}
+m1 <- bam(Target ~ verb_type + s(Time, by=verb_type), data=dat, family='binomial')
+```
+Note that this gives a warning because the first part of the data is all zeroes (see the plots above). People cannot look anywhere in the first 200ms; they're still moving their eyes.
+
+One solution: trim the first part off the timeseries:
+```{r}
+m1 <- bam(Target ~ verb_type + s(Time, by=verb_type), data=dat[dat$Time > 200,], family='binomial')
+summary(m1)
+```
+
+Interpretation: the negative intercept (remember: it's on a logit scale) means that the average proportion of looks at the target is below 0.5. You can transform it back to a proportion for interpretation using `plogis`.
+Similarly, when the verb is restricting, the proportion of looks to the target is even lower.
+
+The edf values of the smooths are very close to their maximum, so it makes sense to allow more edf, by setting k = "some higher value".
+
+```{r}
+plot_smooth(m1, view = "Time", plot_all = "verb_type")
+```
+
+(Be aware that the confidence intervals are very small, indicating that the model is overconfident.)
+
+This plot is on a logit scale, we can transform it back to a proportion scale using the `plogis` transformation in R.
+```{r}
+plot_smooth(m1, view = "Time", plot_all = "verb_type", transform = plogis)
+```
+
+Look at the residuals. Note that we would not expect normal residuals since the data are binomial.
+
+```{r}
+qqnorm(resid(m1))
+qqline(resid(m1))
+```
+
+Are there autocorrelations in the residuals?
+
+```{r}
+acf(resid(m1))
+```
+
+Yes! Not surprising since we don't account for random effects in the model.
+
+
+
+
