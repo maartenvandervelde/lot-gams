@@ -9,6 +9,8 @@ Load packages `mgcv` and `itsadug`.
 Make sure to explicitly convert categorical predictors to factors (`as.factor()`).
 If model fitting fails, this is the first thing to check.
 
+Make sure that the observations in the data set are ordered (if they are not, it will be hard to assess autocorrelation).
+
 ---
 
 ## Fitting a model
@@ -56,6 +58,7 @@ m1 <- gam(Y ~ ..., data = ...)
 
 - Fit a different DV distribution (default is normal distribution): `family = ...` (see `?family.mgcv` and `?family` for options).
 
+---
 
 ## Evaluating a model fit
 
@@ -137,6 +140,8 @@ Tip: we can make a 3D plot by adding `plot.type = "persp"`.
 fvisgam(m1, view = c("A", "B"))
 ```
 
+---
+
 ## Comparing model fits
 
 Unlike nested linear models, GAMs models are not strictly nested, since the presence or absence of each predictor influences the fit of smooths to other predictors. This means that model comparison is not as straightforward, and we should not rely too much on things like AIC score.
@@ -147,3 +152,7 @@ AIC(m1, m2)
 compareML(m1, m2) # Requires models to be fit with method = "ML"
 ```
 
+---
+## Further reading
+
+http://jacolienvanrij.com/Courses/LOT2018/
