@@ -1,0 +1,230 @@
+---
+title: "Assignment: Pupil dilation"
+author: "Maarten van der Velde"
+output: 
+  html_notebook: 
+    smart: false
+    toc: TRUE
+    toc_float:
+      collapsed: false
+---
+
+# Setting up R session
+```{r}
+library(mgcv)
+library(itsadug)
+library(dplyr)
+library(ggplot2)
+theme_set(theme_classic())
+
+library(colorspace)
+
+infoMessages("on")
+packageVersion("mgcv")
+packageVersion("itsadug")
+
+
+```
+
+---
+
+# Assignment
+
+## Inspection of the data
+
+```{r}
+download.file("http://www.jacolienvanrij.com/Courses/LOT2018/Assignment/Data/pupilsize_S1.rds", "pupilsize_S1.rds", mode="wb")
+dat <- readRDS('pupilsize_S1.rds')
+```
+```{r}
+head(dat)
+str(dat)
+```
+
+There are four conditions in total: `imageType` (either `self-oriented` or `other-oriented`) is crossed with `introOrder` (either `A1` or `A2`).
+The plot below shows the grand average pupil dilation over time for each of these four conditions. The first noun phrase is always heard at 995 ms after trial onset, while the second NP is presented somewhere between 1585 ms and 2030 ms.
+```{r}
+# Group observations in 100ms bins based on timestamp, taking the center of each bin as the binned time value.
+dat$Timebin <- timeBins(dat$Time, 100)
+
+# Plot mean pupil size per time bin for each condition
+dat %>%
+  mutate(Condition = interaction(imageType, introOrder)) %>%
+  group_by(Condition, Timebin) %>%
+  summarise(pupil_mean = mean(Pupil, na.rm = TRUE)) %>%
+  ggplot(aes(x = Timebin, y = pupil_mean, colour = Condition)) +
+  geom_line() +
+  geom_vline(xintercept = 995, linetype = "dotted") +
+  annotate("text", x = 850, y = 1400, label = "NP1") +
+  geom_vline(xintercept = 1585, linetype = "dotted") +
+  geom_vline(xintercept = 2030, linetype = "dotted") +
+  annotate("text", x = 1808, y = 1400, label = "<-NP2->") +
+  labs(title = "Grand average pupil dilation", x = "Time (ms)", y = "Pupil size")
+```
+
+*What does the `Timebin` column represent? In case you want to see the code for calculating the timebins type `timeBins` in the command line. Why would it sometimes be useful to plot `Timebin` rather than raw timestamps?*
+
+The `Timebin` column represents binned timestamps: all data points within a 100 ms range (e.g., from 0 ms to 100 ms) are assigned to a single bin and are given the central value of the bin (e.g., 50 ms). 
+Using binned values rather than raw timestamps makes it possible to average over multiple trials in the same condition that are not measured at exactly the same time points. For example, in one trial the first measurement may be done at 2 ms, while in another trial it happens at 3 ms. Without binning, these values could not be averaged (so the plot would only show the average of a subset of trials that happen to align at each time point). With binning, however, both values are counted in the 50 ms bin, so the plot represents the data correctly (albeit slightly smoothed).
+
+
+*Inspect the plot. Why would there be such a sudden increase in dilation after 3000 ms? Hint: type `tapply(dat$Time, list(dat$Event), max)` in the commandline.*
+
+The final pupil measurement happens before 3000 ms in about three quarters of all trials, which strongly suggests that the stimulus may have only been shown for 3000 ms. This would mean that any data after 3000 ms should be disregarded. Since there are only a few observations in each condition after 3000 ms, the mean pupil size is all over the place.
+
+
+## Baseline model
+
+### a. Smooth
+
+```{r}
+nrow(dat)
+```
+There are about 44,000 observations, which means that `bam()` is the way to go.
+
+```{r}
+m1 <- bam(Pupil ~ s(Time), data = dat, method = "fREML", discrete = TRUE, nthreads = 8)
+summary(m1)
+```
+
+
+*Inspect the summary. What does the intercept represent?*
+
+The intercept represents the mean value of the dependent variable, `Pupil`, when the `Time` smooth is equal to zero.
+Note that this does not mean "when `Time` is equal to zero", since the smooth is centered around zero (as the plot further down shows) and equals zero around 1300 ms.
+
+
+*What does the summary of the smooth terms tell about the wiggliness of the smooth? (See the column `edf`)*
+
+The smooth is definitely not a straight line (in which case the effective degrees of freedom would be close to 1), but a nonlinear curve that would need about 5 parameters to be represented parametrically (i.e., it is quite wiggly).
+
+*What does it mean that the smooth term is significant?*
+
+This smooth is significantly different from a straight horizontal line at y = 0 (discounting the intercept).
+
+
+```{r}
+par(mfrow=c(1,2), cex=1.1)
+
+# Partial effect plot:
+plot(m1, select=1, shade=TRUE)
+abline(h=0)
+
+# Fitted values:
+plot_smooth(m1, view="Time")
+```
+
+*What is the difference between the two plots? What do the plots represent?*
+
+The left plot shows only the partial effect of the fitted `Time` smooth, whereas the right plot adds the intercept to this smooth to get the fitted values.
+
+
+
+### b. Random intercepts
+
+Participants differ considerably in pupil dilation size, so the model should account for these differences:
+```{r}
+boxplot(Pupil ~ Subject, data=dat)
+```
+
+Add a random intercept for subjects and items:
+```{r}
+m2 <- bam(Pupil ~ s(Time) + s(Subject, bs = "re") + s(Item, bs = "re"), data = dat, method = "fREML", discrete = TRUE, nthreads = 8)
+summary(m2)
+```
+
+*What does the intercept represent?*
+
+The intercept represents the mean pupil dilation when the `Time` smooth is equal to zero, averaged over subjects and items. 
+
+*What does a random intercept term represent?*
+
+A random intercept term represents the offset from the fixed intercept for each of its levels.
+
+
+Visualise the smooth:
+```{r}
+par(mfrow=c(1,3), cex=1.1)
+
+# Partial effect plot:
+plot(m2, select=1, shade=TRUE)
+abline(h=0)
+
+# Fitted values:
+plot_smooth(m2, view="Time")
+
+# Fitted values without random effects:
+plot_smooth(m2, view="Time", rm.ranef = TRUE)
+```
+
+*What do the plots represent?*
+
+The plot on the left shows the partial effect of the `Time` smooth for subject `s08` and item `30`.
+The middle plot shows the summed fixed effects (`Time` smooth and intercept) for the same subject and item.
+
+*Run the `plot_smooth` function again, but now add `rm.ranef = TRUE` as argument. Why did the plot change so much?*
+
+The right plot excludes random effects, only showing the summed fixed effects for the theoretical "average" subject/item.
+Since intercept differences between subjects and items are no longer accounted for, the model's estimate has much more uncertainty.
+
+
+Inspect the random effects:
+```{r}
+par(mfrow=c(1,3), cex=1.1)
+
+# Partial effect plot:
+plot(m2, select=2)
+
+#  get the values for individual subjects:
+rand <- get_random(m2)
+# note that get_random returns a list with
+# the random adjustments for each random 
+# intercept or slope:
+rand
+
+# similar plot with subj names added:
+xy <- qqnorm(rand[[1]], main='s(Subject)', 
+    col='steelblue', pch=16, bty='n') # <- some additional arguments that could be left out
+qqline(rand[[1]])
+
+text( xy$x, rand[[1]], labels=names( rand[[1]] ),
+      pos=3, col="steelblue", xpd=TRUE) # <- some additional arguments that could be left out
+
+# same for items:
+xy <- qqnorm(rand[[2]], main='s(Item)', 
+    col='steelblue', pch=16, bty='n') # <- some additional arguments that could be left out
+qqline(rand[[2]])
+
+text( xy$x, rand[[2]], labels=names( rand[[2]] ),
+      pos=3, col="steelblue", xpd=TRUE) # <- some additional arguments that could be left out
+```
+
+
+*What does this plot represent? What values are on the axes?*
+
+These plots show the distribution of random intercepts for subjects (left and middle) and items (right).
+Each point represents the intercept offset for a particular subject/item.
+This offset is the value on the y-axis.
+For example, a y-value of 500 means that the intercept for the corresponding subject/item lies 500 above the overall intercept.
+The x-axis shows where each intercept offset would fall in a normal distribution, expressed in quantiles.
+The assumed normal distribution is indicated with the diagonal line.
+The plots show that the `Item` random intercepts are normally distributed, but that `Subject` random intercepts have a few outliers on either side.
+
+
+*Describe what these plots tell about the pupil dilation of subjects `s05`, `s10` and `s06`.*
+
+Subject `s05` has an average pupil dilation that lies far below that of other subjects (about 700 below the average), while subject `s10` has an extremely high average pupil dilation (about 850 above the average). Subject `s06` is a very average subject, with a pupil dilation only about 40 below the average.
+
+
+...
+
+
+
+
+---
+
+# Session info
+```{r}
+sessionInfo()
+```
+
