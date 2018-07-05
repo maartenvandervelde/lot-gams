@@ -55,10 +55,10 @@ dat %>%
   ggplot(aes(x = Timebin, y = pupil_mean, colour = Condition)) +
   geom_line() +
   geom_vline(xintercept = 995, linetype = "dotted") +
-  annotate("text", x = 850, y = 1400, label = "NP1") +
+  annotate("label", x = 995, y = 1400, label = "NP1") +
   geom_vline(xintercept = 1585, linetype = "dotted") +
   geom_vline(xintercept = 2030, linetype = "dotted") +
-  annotate("text", x = 1808, y = 1400, label = "<-NP2->") +
+  annotate("label", x = 1808, y = 1400, label = "< NP2 >") +
   labs(title = "Grand average pupil dilation", x = "Time (ms)", y = "Pupil size")
 ```
 
@@ -135,7 +135,7 @@ summary(m2)
 
 *What does the intercept represent?*
 
-The intercept represents the mean pupil dilation when the `Time` smooth is equal to zero, averaged over subjects and items. 
+The intercept represents the mean pupil dilation when the `Time` smooth is equal to zero, averaged over subjects and items (which each have an additional offset represented by the random intercept). 
 
 *What does a random intercept term represent?*
 
@@ -216,10 +216,62 @@ The plots show that the `Item` random intercepts are normally distributed, but t
 Subject `s05` has an average pupil dilation that lies far below that of other subjects (about 700 below the average), while subject `s10` has an extremely high average pupil dilation (about 850 above the average). Subject `s06` is a very average subject, with a pupil dilation only about 40 below the average.
 
 
-...
+
+Compare the fitted effects with the data:
+```{r}
+# This is a simple function for comparing the 
+# fitted effect with the data:
+plot.fitted <- function(model, subject, n=3, column="Pupil"){
+  dat$fit <- fitted(model)
+
+  # extract the items for this subject:
+  items <- unique( as.character(dat[dat$Subject==subject, "Item"] )) 
+  # if n > length of items, then take length of items:
+  n <-  min(n, length(items))
+  # select n random items
+  items <- sample(items,n)
+  # select these items from the data:
+  tmp <- droplevels( dat[dat$Subject==subject & dat$Item %in% items, 
+                         c("Time", "Item", column, "fit")])
+  # set up empty plot window
+  emptyPlot(range(tmp$Time), range(tmp[,column]), main=subject)
+  # plot the items and their fitted effects:
+  for(i in items){
+    lines(tmp[tmp$Item==i,]$Time, tmp[tmp$Item==i,column], col='darkgray', xpd=TRUE) 
+    lines(tmp[tmp$Item==i,]$Time, tmp[tmp$Item==i,]$fit, col='red', xpd=TRUE) 
+  }
+}
+## end of function
+
+par(mfrow=c(1,1))
+plot.fitted(m2, 's01')
+
+plot.fitted(m2, 's10', n=15)
+```
 
 
+*Why does the fitted effect pattern look different in each new plot?*
 
+The plots change when the code is run again because the function chooses $n$ events at random.
+
+
+*What model terms are the same for all subjects and what is different?*
+
+Same for all subjects: intercept, `Time` smooth, random intercept for `Item`.
+Different between subjects: random intercept for `Subject`.
+
+
+### c. Random smooths
+
+Instead of random intercepts for `Subject` and `Item`, fit a random factor smooth over time for each:
+```{r}
+m3 <- bam(Pupil ~ s(Time) + s(Time, Subject, bs = "fs") + s(Time, Item, bs = "fs"), data = dat, method = "fREML", discrete = TRUE, nthreads = 8)
+summary(m3)
+```
+
+*What can we conclude about the wigglyness of the smooth for Time? Is it still significant?*
+
+Ignoring the warning that the model did not converge, ...
 
 ---
 
