@@ -18,12 +18,25 @@ library(ggplot2)
 theme_set(theme_classic())
 
 library(colorspace)
+library(htmltools)
 
 infoMessages("on")
 packageVersion("mgcv")
 packageVersion("itsadug")
 
 
+```
+
+```{r include=FALSE}
+# Function for creating HTML code for a question/answer pair
+question <- function(q, a) {
+  div(class = "panel panel-info",
+      div(class = "panel-heading",
+          HTML(q)),
+      div(class = "panel-body",
+          HTML(a))
+  )
+}
 ```
 
 ---
@@ -62,15 +75,21 @@ dat %>%
   labs(title = "Grand average pupil dilation", x = "Time (ms)", y = "Pupil size")
 ```
 
-*What does the `Timebin` column represent? In case you want to see the code for calculating the timebins type `timeBins` in the command line. Why would it sometimes be useful to plot `Timebin` rather than raw timestamps?*
+```{r echo = FALSE}
+question(
+  "What does the <code>Timebin</code> column represent? In case you want to see the code for calculating the timebins type <code>timeBins</code> in the command line. Why would it sometimes be useful to plot Timebin rather than raw timestamps?",
+  "The <code>Timebin</code> column represents binned timestamps: all data points within a 100 ms range (e.g., from 0 ms to 100 ms) are assigned to a single bin and are given the central value of the bin (e.g., 50 ms). 
+Using binned values rather than raw timestamps makes it possible to average over multiple trials in the same condition that are not measured at exactly the same time points. For example, in one trial the first measurement may be done at 2 ms, while in another trial it happens at 3 ms. Without binning, these values could not be averaged (so the plot would only show the average of a subset of trials that happen to align at each time point). With binning, however, both values are counted in the 50 ms bin, so the plot represents the data correctly (albeit slightly smoothed)."
+)
+```
 
-The `Timebin` column represents binned timestamps: all data points within a 100 ms range (e.g., from 0 ms to 100 ms) are assigned to a single bin and are given the central value of the bin (e.g., 50 ms). 
-Using binned values rather than raw timestamps makes it possible to average over multiple trials in the same condition that are not measured at exactly the same time points. For example, in one trial the first measurement may be done at 2 ms, while in another trial it happens at 3 ms. Without binning, these values could not be averaged (so the plot would only show the average of a subset of trials that happen to align at each time point). With binning, however, both values are counted in the 50 ms bin, so the plot represents the data correctly (albeit slightly smoothed).
+```{r echo = FALSE}
+question(
+  "Inspect the plot. Why would there be such a sudden increase in dilation after 3000 ms? Hint: type <code>tapply(dat$Time, list(dat$Event), max)</code> in the commandline.",
+  "The final pupil measurement happens before 3000 ms in about three quarters of all trials, which strongly suggests that the stimulus may have only been shown for 3000 ms. This would mean that any data after 3000 ms should be disregarded. Since there are only a few observations in each condition after 3000 ms, the mean pupil size is all over the place."
+)
+```
 
-
-*Inspect the plot. Why would there be such a sudden increase in dilation after 3000 ms? Hint: type `tapply(dat$Time, list(dat$Event), max)` in the commandline.*
-
-The final pupil measurement happens before 3000 ms in about three quarters of all trials, which strongly suggests that the stimulus may have only been shown for 3000 ms. This would mean that any data after 3000 ms should be disregarded. Since there are only a few observations in each condition after 3000 ms, the mean pupil size is all over the place.
 
 
 ## Baseline model
@@ -88,19 +107,27 @@ summary(m1)
 ```
 
 
-*Inspect the summary. What does the intercept represent?*
+```{r echo = FALSE}
+question(
+  "Inspect the summary. What does the intercept represent?",
+  "The intercept represents the mean value of the dependent variable, Pupil, when the <code>Time</code> smooth is equal to zero.
+Note that this does not mean 'when <code>Time</code> is equal to zero', since the smooth is centered around zero (as the plot further down shows) and equals zero around 1300 ms."
+)
+```
 
-The intercept represents the mean value of the dependent variable, `Pupil`, when the `Time` smooth is equal to zero.
-Note that this does not mean "when `Time` is equal to zero", since the smooth is centered around zero (as the plot further down shows) and equals zero around 1300 ms.
+```{r echo = FALSE}
+question(
+  "What does the summary of the smooth terms tell about the wiggliness of the smooth? (See the column <code>edf</code>)",
+  "The smooth is definitely not a straight line (in which case the effective degrees of freedom would be close to 1), but a nonlinear curve that would need about 5 parameters to be represented parametrically (i.e., it is quite wiggly)."
+)
+```
 
-
-*What does the summary of the smooth terms tell about the wiggliness of the smooth? (See the column `edf`)*
-
-The smooth is definitely not a straight line (in which case the effective degrees of freedom would be close to 1), but a nonlinear curve that would need about 5 parameters to be represented parametrically (i.e., it is quite wiggly).
-
-*What does it mean that the smooth term is significant?*
-
-This smooth is significantly different from a straight horizontal line at y = 0 (discounting the intercept).
+```{r echo = FALSE}
+question(
+  "What does it mean that the smooth term is significant?",
+  "This smooth is significantly different from a straight horizontal line at y = 0 (discounting the intercept)."
+)
+```
 
 
 ```{r}
@@ -114,10 +141,12 @@ abline(h=0)
 plot_smooth(m1, view="Time")
 ```
 
-*What is the difference between the two plots? What do the plots represent?*
-
-The left plot shows only the partial effect of the fitted `Time` smooth, whereas the right plot adds the intercept to this smooth to get the fitted values.
-
+```{r echo = FALSE}
+question(
+ "What is the difference between the two plots? What do the plots represent?",
+ "The left plot shows only the partial effect of the fitted <code>Time</code> smooth, whereas the right plot adds the intercept to this smooth to get the fitted values."
+)
+```
 
 
 ### b. Random intercepts
@@ -133,13 +162,19 @@ m2 <- bam(Pupil ~ s(Time) + s(Subject, bs = "re") + s(Item, bs = "re"), data = d
 summary(m2)
 ```
 
-*What does the intercept represent?*
+```{r echo = FALSE}
+question(
+  "What does the intercept represent?",
+  "The intercept represents the mean pupil dilation when the <code>Time</code> smooth is equal to zero, averaged over subjects and items (which each have an additional offset represented by the random intercept)."
+)
+```
 
-The intercept represents the mean pupil dilation when the `Time` smooth is equal to zero, averaged over subjects and items (which each have an additional offset represented by the random intercept). 
-
-*What does a random intercept term represent?*
-
-A random intercept term represents the offset from the fixed intercept for each of its levels.
+```{r echo = FALSE}
+question(
+  "What does a random intercept term represent?",
+  "A random intercept term represents the offset from the fixed intercept for each of its levels."
+)
+```
 
 
 Visualise the smooth:
@@ -157,15 +192,22 @@ plot_smooth(m2, view="Time")
 plot_smooth(m2, view="Time", rm.ranef = TRUE)
 ```
 
-*What do the plots represent?*
+```{r echo = FALSE}
+question(
+  "What do the plots represent?",
+  "The plot on the left shows the partial effect of the <code>Time</code> smooth for subject <code>s08</code> and item <code>30</code>.
+The middle plot shows the summed fixed effects (<code>Time</code> smooth and intercept) for the same subject and item."
+)
+```
 
-The plot on the left shows the partial effect of the `Time` smooth for subject `s08` and item `30`.
-The middle plot shows the summed fixed effects (`Time` smooth and intercept) for the same subject and item.
+```{r echo = FALSE}
+question(
+  "Run the <code>plot_smooth</code> function again, but now add <code>rm.ranef = TRUE</code> as argument. Why did the plot change so much?",
+  "The right plot excludes random effects, only showing the summed fixed effects for the theoretical 'average' subject/item.
+Since intercept differences between subjects and items are no longer accounted for, the model's estimate has much more uncertainty."
+)
+```
 
-*Run the `plot_smooth` function again, but now add `rm.ranef = TRUE` as argument. Why did the plot change so much?*
-
-The right plot excludes random effects, only showing the summed fixed effects for the theoretical "average" subject/item.
-Since intercept differences between subjects and items are no longer accounted for, the model's estimate has much more uncertainty.
 
 
 Inspect the random effects:
@@ -199,21 +241,26 @@ text( xy$x, rand[[2]], labels=names( rand[[2]] ),
       pos=3, col="steelblue", xpd=TRUE) # <- some additional arguments that could be left out
 ```
 
-
-*What does this plot represent? What values are on the axes?*
-
-These plots show the distribution of random intercepts for subjects (left and middle) and items (right).
+```{r echo = FALSE}
+question(
+  "What does this plot represent? What values are on the axes?",
+  "These plots show the distribution of random intercepts for subjects (left and middle) and items (right).
 Each point represents the intercept offset for a particular subject/item.
 This offset is the value on the y-axis.
 For example, a y-value of 500 means that the intercept for the corresponding subject/item lies 500 above the overall intercept.
 The x-axis shows where each intercept offset would fall in a normal distribution, expressed in quantiles.
 The assumed normal distribution is indicated with the diagonal line.
-The plots show that the `Item` random intercepts are normally distributed, but that `Subject` random intercepts have a few outliers on either side.
+The plots show that the <code>Item</code> random intercepts are normally distributed, but that <code>Subject</code> random intercepts have a few outliers on either side."
+)
+```
 
 
-*Describe what these plots tell about the pupil dilation of subjects `s05`, `s10` and `s06`.*
-
-Subject `s05` has an average pupil dilation that lies far below that of other subjects (about 700 below the average), while subject `s10` has an extremely high average pupil dilation (about 850 above the average). Subject `s06` is a very average subject, with a pupil dilation only about 40 below the average.
+```{r echo = FALSE}
+question(
+  "Describe what these plots tell about the pupil dilation of subjects <code>s05</code>, <code>s10</code> and <code>s06</code>.",
+  "Subject <code>s05</code> has an average pupil dilation that lies far below that of other subjects (about 700 below the average), while subject <code>s10</code> has an extremely high average pupil dilation (about 850 above the average). Subject <code>s06</code> is a very average subject, with a pupil dilation only about 40 below the average."
+)
+```
 
 
 
@@ -249,16 +296,20 @@ plot.fitted(m2, 's01')
 plot.fitted(m2, 's10', n=15)
 ```
 
+```{r echo = FALSE}
+question(
+  "Why does the fitted effect pattern look different in each new plot?",
+  "The plots change when the code is run again because the function chooses <i>n</i> events at random."
+)
+```
 
-*Why does the fitted effect pattern look different in each new plot?*
-
-The plots change when the code is run again because the function chooses $n$ events at random.
-
-
-*What model terms are the same for all subjects and what is different?*
-
-Same for all subjects: intercept, `Time` smooth, random intercept for `Item`.
-Different between subjects: random intercept for `Subject`.
+```{r echo = FALSE}
+question(
+  "What model terms are the same for all subjects and what is different?",
+  "Same for all subjects: intercept, <code>Time</code> smooth, random intercept for <code>Item</code>.
+Different between subjects: random intercept for <code>Subject</code>."
+)
+```
 
 
 ### c. Random smooths
@@ -506,7 +557,158 @@ Alternatively, it might help to increase the interval between consecutive observ
 
 ### e. Investigating the effects of image type and introduction order
 
-...
+Test whether `imageType` and `introOrder` have an effect on the pupil dilation trajectory.
+Since these two variables are categorical, we can make a `condition` variable for the interaction of the two, so that we end up with four conditions:
+```{r}
+dat$condition <- interaction(dat$imageType, dat$introOrder)
+```
+
+Include the interaction between `Time` and `condition` in the previous model by fitting the `Time` smooth separately for each condition. I include a main effect of condition, so that the smooth does not have to fit the entire baseline difference between conditions:
+```{r}
+m5 <- bam(Pupil ~ condition +
+            s(Time, by = condition) +
+            s(Time, Subject, bs = "fs", m = 1) +
+            s(Time, Item, bs = "fs", m = 1) +
+            s(Event, bs = "re"),
+          data = dat,
+          AR.start = dat$start.event,
+          rho = rho,
+          discrete = TRUE,
+          nthreads = 8)
+summary(m5)
+```
+
+*Inspect the summary. What can we conclude about the differences between the four experimental conditions?*
+
+Based on the summary alone it is hard to conclude much about the differences between conditions; none of the intercept differences between conditions is significant, and we know that the `Time` smooth is significantly different from a horizontal line at $y = 0$ in all four conditions, but not how it differs *between* conditions.
+We can plot the fitted effects for all conditions, but as expected they look very similar:
+
+```{r}
+plot_smooth(m5, view = "Time", plot_all = "condition", rm.ranef = TRUE)
+```
+
+
+*Name two other methods that we could use to investigate whether there are significant differences in the pupil size trajectories of the experimental conditions.*
+
+The `plot_diff()` function can show pairwise comparisons between conditions, and will highlight in red where there are significant differences:
+```{r}
+par(mfrow = c(3,2), cex = 0.75)
+plot_diff(m5, view = "Time", comp = list(condition = c("other-oriented.A1", "self-oriented.A1")), rm.ranef = TRUE)
+plot_diff(m5, view = "Time", comp = list(condition = c("other-oriented.A1", "other-oriented.A2")), rm.ranef = TRUE)
+plot_diff(m5, view = "Time", comp = list(condition = c("other-oriented.A1", "self-oriented.A2")), rm.ranef = TRUE)
+plot_diff(m5, view = "Time", comp = list(condition = c("self-oriented.A1", "other-oriented.A2")), rm.ranef = TRUE)
+plot_diff(m5, view = "Time", comp = list(condition = c("self-oriented.A1", "self-oriented.A2")), rm.ranef = TRUE)
+plot_diff(m5, view = "Time", comp = list(condition = c("self-oriented.A2", "other-oriented.A2")), rm.ranef = TRUE)
+```
+
+Another way to test for differences between conditions would be to use contrast coding in the model, where one condition is set to be the reference level and significant effects for other conditions indicate that they are different from the reference condition.
+
+
+Represent the conditions using *binary predictors* (dummy coding):
+```{r}
+dat$IsA1 <- ifelse(dat$introOrder=="A1", 1, 0)
+dat$IsSelf <- ifelse(dat$imageType=="self-oriented", 1, 0)
+dat$IsA1Self <- ifelse(dat$introOrder=="A1" & dat$imageType=="self-oriented", 1, 0)
+
+m6 <- bam( Pupil ~ s(Time) 
+          + s(Time, by=IsA1)
+          + s(Time, by=IsSelf)
+          + s(Time, by=IsA1Self)
+          + s(Time, Subject, bs = 'fs', m = 1) 
+          + s(Time, Item, bs = 'fs', m = 1) 
+          + s(Event, bs = 're'),
+          data = dat,
+          AR.start = dat$start.event,
+          rho = rho,
+          discrete=TRUE,
+          nthreads = 8)
+summary(m6)
+```
+
+
+*Inspect the summary. What is represented by the intercept?*
+
+The intercept represents the condition in which each of the binary predictors is zero: *other-oriented:A2*.
+
+
+*Describe what the four fixed effects trajectories that include Time represent (i.e., the top four lines of the smooth term summary).*
+
+They describe the `Time` smooth belonging to each of the four conditions. From top to bottom: *other-oriented:A2*, *other-oriented:A1*, *self-oriented:A2*, *self-oriented:A1*.
+
+
+*Why do we not need to include the binary predictors as parametric terms / main effects ( intercept adjustments)?*
+
+It would not make sense to include tem as main effects as we already fit a separate smooth term for each condition and "turn them on or off" based on the condition (unlike in the previous model, where a single smooth term explicitly captured all differences between conditions).
+
+
+*What can we conclude about the differences between the four experimental conditions?*
+
+Based on this model summary, we can conclude that the pupil dilation trajectory is significantly different when:
+
+- the actor is introduced first rather than second (when an other-oriented action is shown);
+- a self-oriented action is shown rather than an other-oriented action (when the actor is introduced second);
+- a self-oriented action is shown rather than an other-oriented action, and the actor is introduced first rather than second.
+
+
+Inspect the three binary predictor curves:
+```{r}
+par(mfrow = c(1,3))
+plot(m6, scale=0, select=2, main = "s(Time):IsA1")
+abline(h=0)
+
+plot(m6, scale=0, select=3, main = "s(Time):IsSelf")
+abline(h=0)
+
+plot(m6, scale=0, select=4, main = "s(Time):IsA1Self")
+abline(h=0)
+```
+
+*Inspect the plots. What can we conclude about the differences between the four experimental conditions?*
+
+From left to right:
+
+- Pupil dilation is greater from about 1000 ms to 1500 ms if the actor is introduced first rather than second (when an other-oriented action is shown).
+- Pupil dilation appears to be the same when the actor is introduced second, regardless of whether the action shown is self-oriented or other-oriented. The fact that this contrast is significant in the model suggests that the dilation difference at the very end of the trial (after 3000 ms) is significant (the bottom-right plot in the condition comparison for model 5 corroborates this), but I would consider this a spurious effect.
+- The pupil dilates less between about 500 ms and 1500 ms when a self-oriented action is accompanied by a sentence in which the actor is introduced first, compared to an other-oriented action accompanied by a sentence in which the actor is introduced second.
+
+
+*Use model comparisons (functions compareML and AIC) to test whether the binary interaction predictor IsSelfA1 is significantly contributing to the model. Provide the code for the model comparison in your assignment. (Note that actually model m6 and the new model should be run with method="ML" included for fixed effects comparisons, but for time reasons we will ignore this for the current assignment.)*
+
+First run `m6` again without the `IsSelfA1` predictor:
+```{r}
+m6b <- bam( Pupil ~ s(Time) 
+          + s(Time, by=IsA1)
+          + s(Time, by=IsSelf)
+          + s(Time, Subject, bs = 'fs', m = 1) 
+          + s(Time, Item, bs = 'fs', m = 1) 
+          + s(Event, bs = 're'),
+          data = dat,
+          AR.start = dat$start.event,
+          rho = rho,
+          discrete=TRUE,
+          nthreads = 8)
+summary(m6b)
+```
+
+
+Compare this model to the full model:
+```{r}
+AIC(m6, m6b)
+compareML(m6, m6b)
+```
+
+
+*What is your conclusion based on the model comparisons, the plots, and the summary statistics?*
+
+The full model uses more degrees of freedom, but has a significantly lower AIC score than the model that leaves out the `IsSelfA1` predictor.
+The plots also showed that this predictor is important to include in the model: while the two components `IsA1` and `IsSelf` by themselves predict an increase or no change in pupil dilation relative to the reference condition, the interaction of these components actually makes the opposite prediction: pupil dilation  *decreases* relative to the reference condition when both are true. It is therefore necessary to include the interaction in the model.
+
+<div class="panel panel-info">
+  <div class="panel-heading">*What is your conclusion based on the model comparisons, the plots, and the summary statistics?*</div>
+  <div class="panel-body">The full model uses more degrees of freedom, but has a significantly lower AIC score than the model that leaves out the `IsSelfA1` predictor.
+The plots also showed that this predictor is important to include in the model: while the two components `IsA1` and `IsSelf` by themselves predict an increase or no change in pupil dilation relative to the reference condition, the interaction of these components actually makes the opposite prediction: pupil dilation  *decreases* relative to the reference condition when both are true. It is therefore necessary to include the interaction in the model.
+</div>
+</div>
 
 
 ---
