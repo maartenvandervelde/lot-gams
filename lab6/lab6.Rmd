@@ -1,12 +1,11 @@
 ---
-title: "Assignment: Pupil dilation"
+title: 'Assignment: Pupil dilation'
 author: "Maarten van der Velde"
-output: 
-  html_notebook: 
-    smart: false
-    toc: TRUE
+output:
+  html_notebook:
+    toc: yes
     toc_float:
-      collapsed: false
+      collapsed: no
 ---
 
 # Setting up R session
@@ -15,16 +14,13 @@ library(mgcv)
 library(itsadug)
 library(dplyr)
 library(ggplot2)
-theme_set(theme_classic())
-
-library(colorspace)
 library(htmltools)
+
+theme_set(theme_classic())
 
 infoMessages("on")
 packageVersion("mgcv")
 packageVersion("itsadug")
-
-
 ```
 
 ```{r include=FALSE}
@@ -320,15 +316,22 @@ m3 <- bam(Pupil ~ s(Time) + s(Time, Subject, bs = "fs") + s(Time, Item, bs = "fs
 summary(m3)
 ```
 
-*What can we conclude about the wigglyness of the smooth for Time? Is it still significant?*
+```{r echo = FALSE}
+question(
+ "What can we conclude about the wigglyness of the smooth for Time? Is it still significant?",
+ "(Ignoring the warning that the algorithm did not converge.)
+The <code>Time</code> smooth uses 4.43 effective degrees of freedom, which would make it a nonlinear curve. That said, the corresponding p-value is not significant, which means that the smooth is not significantly different from a horizontal line at y = 0.
+This is not so surprising: by including a random <code>Time</code> smooth for each item and each subject, the model can already account for temporal fluctuations in pupil dilation at a much finer level."
+)
+```
 
-(Ignoring the warning that the algorithm did not converge.)
-The `Time` smooth uses 4.43 effective degrees of freedom, which would make it a nonlinear curve. That said, the corresponding p-value is not significant, which means that the smooth is not significantly different from a horizontal line at y = 0.
-This is not so surprising: by including a random `Time` smooth for each item and each subject, the model can already account for temporal fluctuations in pupil dilation at a much finer level.
+```{r echo = FALSE}
+question(
+  "Why do the random smooth terms have such high <code>edf</code> value?",
+  "The random smooth terms are fitting an independent nonlinear curve to the time series of each item/subject. This means, for example, that the model may use up to 10 base functions to capture the temporal pattern for a single participant. In the worst case, this would require 99 degrees of freedom to model the <code>Time</code> smooth for 10 participants. The same applies to the item smooths."
+)
+```
 
-*Why do the random smooth terms have such high `edf` value?*
-
-The random smooth terms are fitting an independent nonlinear curve to the time series of each item/subject. This means, for example, that the model may use up to 10 base functions to capture the temporal pattern for a single participant. In the worst case, this would require 99 degrees of freedom to model the `Time` smooth for 10 participants. The same applies to the item smooths.
 
 
 Visualise the smooth:
@@ -347,25 +350,35 @@ abline(h=0)
 plot_smooth(m3, view="Time", plot_all="Subject", rug=FALSE)
 ```
 
-*What do the different plots represent?*
+```{r echo = FALSE}
+question(
+  "What do the different plots represent?",
+  "The plot on the left shows the partial effect of the (fixed) <code>Time</code> smooth. This plot also illustrates why the effect is not significant: the confidence interval includes the x-axis.
 
-The plot on the left shows the partial effect of the (fixed) `Time` smooth. This plot also illustrates why the effect is not significant: the confidence interval includes the x-axis.
+The middle plot shows the partial effect of the random <code>Time</code> smooth of each of the 10 participants.
 
-The middle plot shows the partial effect of the random `Time` smooth of each of the 10 participants.
+The plot on the right shows summed effects: it adds the fixed effects of the intercept and the general <code>Time</code> smooth to the subject-specific <code>Time</code> smooths. 
+The random <code>Time</code> smooth for item 30 is also included in these fitted values."
+)
+```
 
-The plot on the right shows summed effects: it adds the fixed effects of the intercept and the general `Time` smooth to the subject-specific `Time` smooths. 
-The random `Time` smooth for item 30 is also included in these fitted values.
 
-
-*How do the random smooths change the effect of pupil dilation over time?*
-
-The general trend over time seems to be that pupil dilation increases (captured by the fixed `Time` smooth, although it is not significant in this particular model).
+```{r echo = FALSE}
+question(
+  "How do the random smooths change the effect of pupil dilation over time?",
+  "The general trend over time seems to be that pupil dilation increases (captured by the fixed <code>Time</code> smooth, although it is not significant in this particular model).
 The random smooths model residual changes in pupil dilation over time in a slightly different, nonlinear way for each participant and each item.
-Some show an increasing pattern, meaning that the pupil size increases even more than average in these cases; others show a decreasing pattern, in which case pupil dilation is not as strong; yet others stay fairly horizontal, indicating that the change in pupil dilation over time is already captured quite well by the fixed effect of `Time`.
+Some show an increasing pattern, meaning that the pupil size increases even more than average in these cases; others show a decreasing pattern, in which case pupil dilation is not as strong; yet others stay fairly horizontal, indicating that the change in pupil dilation over time is already captured quite well by the fixed effect of <code>Time</code>."
+)
+```
 
-*Why did we not include a random intercept for subjects together with the random smooth for subjects?*
 
-The random smooths can already capture an offset (as is clearly demonstrated in the middle plot), so an intercept has no additional value.
+```{r echo = FALSE}
+question(
+  "Why did we not include a random intercept for subjects together with the random smooth for subjects?",
+  "The random smooths can already capture an offset (as is clearly demonstrated in the middle plot), so an intercept has no additional value."
+)
+```
 
 
 Plot fitted effects (shows that variation within subjects is not captured well):
@@ -408,15 +421,21 @@ Visualise the fitted effects:
 plot.fitted(m4, 's01', n=15)
 ```
 
-*Why is it useful to add intercepts for each Event rather than for each Item? Why would the random effects of Subject and Item in many time series data not be sufficient?*
+```{r echo = FALSE}
+question(
+  "Why is it useful to add intercepts for each <code>Event</code> rather than for each <code>Item</code>? Why would the random effects of <code>Subject</code> and <code>Item</code> in many time series data not be sufficient?",
+  "It is clear from the fitted effects plot above that there are sizeable baseline differences in pupil size <i>within</i> participants, which is to be expected as pupil size can fluctuate naturally over a task. A random <code>Subject</code> effect cannot capture this as it is the same for all the subject's trials. Furthermore, in many cases the difference in baseline pupil size is already present at <i>t = 0</i>, meaning that it has little to do with the item itself, and that a random <code>Item</code> effect is therefore ineffective at capturing this variance. The <code>Event</code> intercept can account for these general fluctuations in pupil size that are not consistently tied to a subject or item much better since the intercept is fitted to each trial individually."
+  )
+```
 
-It is clear from the fitted effects plot above that there are sizeable baseline differences in pupil size *within* participants, which is to be expected as pupil size can fluctuate naturally over a task. A random `Subject` effect cannot capture this as it is the same for all the subject's trials. Furthermore, in many cases the difference in baseline pupil size is already present at $t = 0$, meaning that it has little to do with the item itself, and that a random `Item` effect is therefore ineffective at capturing this variance. The `Event` intercept can account for these general fluctuations in pupil size that are not consistently tied to a subject or item much better since the intercept is fitted to each trial individually.
+```{r echo = FALSE}
+question(
+  "What is your opinion on the model fit? What random effect would improve the model further?",
+  "Based on the plots above, this model appears to fit the data quite well.
+It could be further improved with a random factor smooth for each <code>Event</code> over <code>Time</code> (instead of the random intercept for <code>Event</code>). This would allow it to fit differences in the magnitude of the pupil dilation better (with a random intercept the model still assumes that the change in pupil size is the same regardless of how big the pupil is at the start of the trial, which does not seem like a reasonable assumption)."
+)
+```
 
-
-*What is your opinion on the model fit? What random effect would improve the model further?*
-
-Based on the plots above, this model appears to fit the data quite well.
-It could be further improved with a random factor smooth for each `Event` over `Time` (instead of the random intercept for `Event`). This would allow it to fit differences in the magnitude of the pupil dilation better (with a random intercept the model still assumes that the change in pupil size is the same regardless of how big the pupil is at the start of the trial, which does not seem like a reasonable assumption).
 
 ### d. Model criticisn
 
@@ -430,35 +449,39 @@ qqline(resid(m4))
 acf(resid(m4))
 ```
 
-
-*Shortly describe the QQ plot: what do the axis represent, and how could a QQ plot be interpreted.*
-The QQ-plot checks whether the residuals follow a normal distribution (the assumption of normality).
+```{r echo = FALSE}
+question(
+  "Shortly describe the QQ plot: what do the axis represent, and how could a QQ plot be interpreted.",
+  "The QQ-plot checks whether the residuals follow a normal distribution (the assumption of normality).
 The x-axis shows where each residual would fall in a normal distribution, expressed in theoretical quantiles; the y-axis shows to which quantile the residual belongs in the actual distribution.
 The assumed normal distribution is indicated with the diagonal line.
 This means that residuals that conform to the normality assumption would appear as points on or close to the diagonal.
-If the points systematically deviate from the diagonal (as they do here), the normality assumption is violated.
+If the points systematically deviate from the diagonal (as they do here), the normality assumption is violated."
+)
+```
 
-
-
-*Describe the pattern in the QQ plot. What do you conclude with respect to the distribution of the residuals? Is this pattern good or bad?*
-
-The QQ-plot shows that the residuals are not normally distributed, which is bad.
+```{r echo = FALSE}
+question(
+  "Describe the pattern in the QQ plot. What do you conclude with respect to the distribution of the residuals? Is this pattern good or bad?",
+  "The QQ-plot shows that the residuals are not normally distributed, which is bad.
 Values on the left are more extreme than they should be according to the normality assumption, which means that the left tail of the distribution is relatively heavy.
-The same pattern is visible on the right side: there is a heavier right tail than would be expected from a normal distribution. 
+The same pattern is visible on the right side: there is a heavier right tail than would be expected from a normal distribution. "
+)
+```
 
+```{r echo = FALSE}
+question(
+  "Shortly describe the ACF: what do the axis represent, and how could an ACF plot be interpreted.",
+  "The ACF plot shows the degree of autocorrelation in the residuals. The height of each line represents the correlation between the residuals and the lagged residuals (residuals shifted by a lag of 1, 2, 3, etc.; shown on the x-axis). We assume the residuals to be independent from one another, in which case the ACF plot would show autocorrelations close to zero. However, if there are regularities in the signal that the model has not explained, the will show up in the residuals, and the autocorrelation will be much higher. Such cases mean the data should be adjusted (more time between samples), the model should be changd to include terms that can explain regularities (e.g. random effects for subjects), or an AR1 model should be included."
+)
+```
 
-*Shortly describe the ACF: what do the axis represent, and how could an ACF plot be interpreted.*
-
-The ACF plot shows the degree of autocorrelation in the residuals. The height of each line represents the correlation between the residuals and the lagged residuals (residuals shifted by a lag of 1, 2, 3, etc.; shown on the x-axis). We assume the residuals to be independent from one another, in which case the ACF plot would show autocorrelations close to zero. However, if there are regularities in the signal that the model has not explained, the will show up in the residuals, and the autocorrelation will be much higher. Such cases mean the data should be adjusted (more time between samples), the model should be changd to include terms that can explain regularities (e.g. random effects for subjects), or an AR1 model should be included.
-
-
-
-
-
-*Describe the pattern in the ACF plot. What do you conclude with respect to the independence of the residuals? Is there structure in the residuals?*
-
-In this case, the degree of autocorrelation is extremely high at lag 1 and quite persistent over greater lags. The value of one residual is almost perfectly correlated with the value of the next residual, and still strongly correlated with residuals that are further away. This means that there are strong regularities in the signal that the model has not accounted for, which is not good.
-
+```{r echo = FALSE}
+question(
+  "Describe the pattern in the ACF plot. What do you conclude with respect to the independence of the residuals? Is there structure in the residuals?",
+  "In this case, the degree of autocorrelation is extremely high at lag 1 and quite persistent over greater lags. The value of one residual is almost perfectly correlated with the value of the next residual, and still strongly correlated with residuals that are further away. This means that there are strong regularities in the signal that the model has not accounted for, which is not good."
+)
+```
 
 
 Include an AR1 model. Start by adding a `start.event` column:
@@ -466,10 +489,13 @@ Include an AR1 model. Start by adding a `start.event` column:
 dat <- start_event(dat, event="Event")
 ```
 
-*Inspect the new column. What does the column indicate? Why does the AR1 model need this information?*
-
-This column marks the first observation in each `Event` (trial).
-The AR1 model needs this to delineate events: while it should expect residuals from observations within the same trial to be correlated, it should not assume that the residual of the last observation in a trial is necessarily correlated with that of the first observation in another trial.
+```{r echo = FALSE}
+question(
+  "Inspect the new column. What does the column indicate? Why does the AR1 model need this information?",
+  "This column marks the first observation in each <code>Event</code> (trial).
+The AR1 model needs this to delineate events: while it should expect residuals from observations within the same trial to be correlated, it should not assume that the residual of the last observation in a trial is necessarily correlated with that of the first observation in another trial."
+)
+```
 
 Set `rho` to the autocorrelation at lag 1:
 ```{r}
@@ -486,10 +512,15 @@ m4b <- bam( Pupil ~ s(Time)
 summary(m4b)
 ```
 
-*Inspect the summary and the plots to see what has changed in the model.*
+```{r echo = FALSE}
+question(
+  "Inspect the summary and the plots to see what has changed in the model.",
+  "The summary looks about the same as that of the model without AR1: all predictors are still significant and the amount of variance explained is very similar.
+The smooth terms (see below) also look similar to before. The distribution of the residuals (see below) is still wider than a normal distribution, but the autocorrelation in the residuals has been reduced."
+)
+```
 
-The summary looks about the same as that of the model without AR1: all predictors are still significant and the amount of variance explained is very similar.
-The smooth terms also look similar to before:
+
 ```{r}
 par(mfrow=c(2,2), cex=0.75)
 
@@ -510,7 +541,6 @@ plot_smooth(m4b, view="Time", rm.ranef=TRUE)
 
 ```
 
-The distribution of the residuals is still wider than a normal distribution, but the autocorrelation in the residuals has been reduced:
 ```{r}
 par(mfrow = c(1,2))
 qqnorm(resid(m4b))
@@ -518,6 +548,7 @@ qqline(resid(m4b))
 acf_resid(m4b)
 ```
 
+Two plots of the new residuals:
 ```{r}
 par(mfrow=c(1,2))
 
@@ -525,21 +556,26 @@ acf(resid(m4b), main='Residuals')
 acf_resid(m4b, main='Corrected residuals')
 ```
 
-
-*What do these plots represent? Did the AR1 model reduce the autocorrelation?*
-
-The plot on the left is the same autocorrelation plot as before.
+```{r echo = FALSE}
+question(
+  "What do these plots represent? Did the AR1 model reduce the autocorrelation?",
+  "The plot on the left is the same autocorrelation plot as before.
 The plot on the right shows the autocorrelation in the residuals after they have been corrected by the AR1 model.
-It is clear that the AR1 model did indeed reduce the autocorrelation.
+It is clear that the AR1 model did indeed reduce the autocorrelation."
+)
+```
 
-
-*Use the function compareML to compare the two models, m4 and m4b. Which one is preferred?*
+```{r echo = FALSE}
+question(
+  "Use the function compareML to compare the two models, m4 and m4b. Which one is preferred?",
+  "Based on its much lower AIC score (see below), the model that includes the AR1 model is preferred."
+)
+```
 
 ```{r}
 compareML(m4, m4b)
 ```
 
-Based on its lower AIC score, the model that includes the AR1 model is preferred.
 
 
 
@@ -548,11 +584,14 @@ Compare the ACF lag 1 value for different events:
 acf_resid(m4b, split_pred=list(Event=dat$Event), n=9)
 ```
 
-*The current implementation of AR1 model may be too simple to account for all autocorrelation problems in the data. Given the 9 plots, what would be a useful extansion / adjustment of the AR1 model?*
-
-Judging by the plots, it appears that for most of the distribution, autocorrelation is sufficiently accounted for by the current AR1 model.
-Perhaps including a higher-order AR($\rho$) model would reduce the unexplained autocorrelation in the most extreme cases.
-Alternatively, it might help to increase the interval between consecutive observations, since observations that are further apart are naturally less correlated.
+```{r echo = FALSE}
+question(
+  "The current implementation of AR1 model may be too simple to account for all autocorrelation problems in the data. Given the 9 plots, what would be a useful extansion / adjustment of the AR1 model?",
+  "Judging by the plots, it appears that for most of the distribution, autocorrelation is sufficiently accounted for by the current AR1 model.
+Perhaps including a higher-order AR(<i>&rho;</i>) model would reduce the unexplained autocorrelation in the most extreme cases.
+Alternatively, it might help to increase the interval between consecutive observations, since observations that are further apart are naturally less correlated."
+)
+```
 
 
 ### e. Investigating the effects of image type and introduction order
@@ -578,19 +617,28 @@ m5 <- bam(Pupil ~ condition +
 summary(m5)
 ```
 
-*Inspect the summary. What can we conclude about the differences between the four experimental conditions?*
+```{r echo = FALSE}
+question(
+  "Inspect the summary. What can we conclude about the differences between the four experimental conditions?",
+  "Based on the summary alone it is hard to conclude much about the differences between conditions; none of the intercept differences between conditions is significant, and we know that the <code>Time</code> smooth is significantly different from a horizontal line at <i>y = 0</i> in all four conditions, but not how it differs <i>between</i> conditions.
+We can plot the fitted effects for all conditions (see below), but as expected based on the summary they look very similar."
+)
+```
 
-Based on the summary alone it is hard to conclude much about the differences between conditions; none of the intercept differences between conditions is significant, and we know that the `Time` smooth is significantly different from a horizontal line at $y = 0$ in all four conditions, but not how it differs *between* conditions.
-We can plot the fitted effects for all conditions, but as expected they look very similar:
+
 
 ```{r}
 plot_smooth(m5, view = "Time", plot_all = "condition", rm.ranef = TRUE)
 ```
 
+```{r echo = FALSE}
+question(
+  "Name two other methods that we could use to investigate whether there are significant differences in the pupil size trajectories of the experimental conditions.",
+  "The <code>plot_diff()</code> function can show pairwise comparisons between conditions, and will highlight in red where there are significant differences (see the comparison plots below). Another way to test for differences between conditions would be to use contrast coding in the model, where one condition is set to be the reference level and significant effects for other conditions indicate that they are different from the reference condition."
+)
+```
 
-*Name two other methods that we could use to investigate whether there are significant differences in the pupil size trajectories of the experimental conditions.*
 
-The `plot_diff()` function can show pairwise comparisons between conditions, and will highlight in red where there are significant differences:
 ```{r}
 par(mfrow = c(3,2), cex = 0.75)
 plot_diff(m5, view = "Time", comp = list(condition = c("other-oriented.A1", "self-oriented.A1")), rm.ranef = TRUE)
@@ -601,7 +649,6 @@ plot_diff(m5, view = "Time", comp = list(condition = c("self-oriented.A1", "self
 plot_diff(m5, view = "Time", comp = list(condition = c("self-oriented.A2", "other-oriented.A2")), rm.ranef = TRUE)
 ```
 
-Another way to test for differences between conditions would be to use contrast coding in the model, where one condition is set to be the reference level and significant effects for other conditions indicate that they are different from the reference condition.
 
 
 Represent the conditions using *binary predictors* (dummy coding):
@@ -625,29 +672,39 @@ m6 <- bam( Pupil ~ s(Time)
 summary(m6)
 ```
 
+```{r echo = FALSE}
+question(
+  "Inspect the summary. What is represented by the intercept?",
+  "The intercept represents the condition in which each of the binary predictors is zero: <i>other-oriented:A2</i>."
+)
+```
 
-*Inspect the summary. What is represented by the intercept?*
+```{r echo = FALSE}
+question(
+  "Describe what the four fixed effects trajectories that include Time represent (i.e., the top four lines of the smooth term summary).",
+  "They describe the <code>Time</code> smooth belonging to each of the four conditions. From top to bottom: <i>other-oriented:A2</i>, <i>other-oriented:A1</i>, <i>self-oriented:A2</i>, and <i>self-oriented:A1</i>."
+)
+```
 
-The intercept represents the condition in which each of the binary predictors is zero: *other-oriented:A2*.
+```{r echo = FALSE}
+question(
+  "Why do we not need to include the binary predictors as parametric terms / main effects ( intercept adjustments)?",
+  "It would not make sense to include tem as main effects as we already fit a separate smooth term for each condition and 'turn them on or off' based on the condition (unlike in the previous model, where a single smooth term explicitly captured all differences between conditions)."
+)
+```
 
-
-*Describe what the four fixed effects trajectories that include Time represent (i.e., the top four lines of the smooth term summary).*
-
-They describe the `Time` smooth belonging to each of the four conditions. From top to bottom: *other-oriented:A2*, *other-oriented:A1*, *self-oriented:A2*, *self-oriented:A1*.
-
-
-*Why do we not need to include the binary predictors as parametric terms / main effects ( intercept adjustments)?*
-
-It would not make sense to include tem as main effects as we already fit a separate smooth term for each condition and "turn them on or off" based on the condition (unlike in the previous model, where a single smooth term explicitly captured all differences between conditions).
-
-
-*What can we conclude about the differences between the four experimental conditions?*
-
-Based on this model summary, we can conclude that the pupil dilation trajectory is significantly different when:
-
-- the actor is introduced first rather than second (when an other-oriented action is shown);
-- a self-oriented action is shown rather than an other-oriented action (when the actor is introduced second);
-- a self-oriented action is shown rather than an other-oriented action, and the actor is introduced first rather than second.
+```{r echo = FALSE}
+question(
+  "What can we conclude about the differences between the four experimental conditions?",
+  "Based on this model summary, we can conclude that the pupil dilation trajectory is significantly different when:
+<ul>
+<li> the actor is introduced first rather than second (when an other-oriented action is shown);</li>
+<li> a self-oriented action is shown rather than an other-oriented action (when the actor is introduced second);</li>
+<li> a self-oriented action is shown rather than an other-oriented action, and the actor is introduced first rather than second.</li>
+</ul>
+"
+)
+```
 
 
 Inspect the three binary predictor curves:
@@ -663,16 +720,25 @@ plot(m6, scale=0, select=4, main = "s(Time):IsA1Self")
 abline(h=0)
 ```
 
-*Inspect the plots. What can we conclude about the differences between the four experimental conditions?*
+```{r echo = FALSE}
+question(
+  "Inspect the plots. What can we conclude about the differences between the four experimental conditions?",
+  "From left to right:
+<ul>
+<li> Pupil dilation is greater from about 1000 ms to 1500 ms if the actor is introduced first rather than second (when an other-oriented action is shown).</li>
+<li> Pupil dilation appears to be the same when the actor is introduced second, regardless of whether the action shown is self-oriented or other-oriented. The fact that this contrast is significant in the model suggests that the dilation difference at the very end of the trial (after 3000 ms) is significant (the bottom-right plot in the condition comparison for model 5 corroborates this), but I would consider this a spurious effect.</li>
+<li> The pupil dilates less between about 500 ms and 1500 ms when a self-oriented action is accompanied by a sentence in which the actor is introduced first, compared to an other-oriented action accompanied by a sentence in which the actor is introduced second.</li>
+</ul>"
+)
+```
 
-From left to right:
+```{r echo = FALSE}
+question(
+  "Use model comparisons (functions <code>compareML</code> and <code>AIC</code>) to test whether the binary interaction predictor <code>IsSelfA1</code> is significantly contributing to the model. Provide the code for the model comparison in your assignment. (Note that actually model <code>m6</code> and the new model should be run with <code>method='ML'</code> included for fixed effects comparisons, but for time reasons we will ignore this for the current assignment.)",
+  "See below."
+)
+```
 
-- Pupil dilation is greater from about 1000 ms to 1500 ms if the actor is introduced first rather than second (when an other-oriented action is shown).
-- Pupil dilation appears to be the same when the actor is introduced second, regardless of whether the action shown is self-oriented or other-oriented. The fact that this contrast is significant in the model suggests that the dilation difference at the very end of the trial (after 3000 ms) is significant (the bottom-right plot in the condition comparison for model 5 corroborates this), but I would consider this a spurious effect.
-- The pupil dilates less between about 500 ms and 1500 ms when a self-oriented action is accompanied by a sentence in which the actor is introduced first, compared to an other-oriented action accompanied by a sentence in which the actor is introduced second.
-
-
-*Use model comparisons (functions compareML and AIC) to test whether the binary interaction predictor IsSelfA1 is significantly contributing to the model. Provide the code for the model comparison in your assignment. (Note that actually model m6 and the new model should be run with method="ML" included for fixed effects comparisons, but for time reasons we will ignore this for the current assignment.)*
 
 First run `m6` again without the `IsSelfA1` predictor:
 ```{r}
@@ -697,19 +763,13 @@ AIC(m6, m6b)
 compareML(m6, m6b)
 ```
 
-
-*What is your conclusion based on the model comparisons, the plots, and the summary statistics?*
-
-The full model uses more degrees of freedom, but has a significantly lower AIC score than the model that leaves out the `IsSelfA1` predictor.
-The plots also showed that this predictor is important to include in the model: while the two components `IsA1` and `IsSelf` by themselves predict an increase or no change in pupil dilation relative to the reference condition, the interaction of these components actually makes the opposite prediction: pupil dilation  *decreases* relative to the reference condition when both are true. It is therefore necessary to include the interaction in the model.
-
-<div class="panel panel-info">
-  <div class="panel-heading">*What is your conclusion based on the model comparisons, the plots, and the summary statistics?*</div>
-  <div class="panel-body">The full model uses more degrees of freedom, but has a significantly lower AIC score than the model that leaves out the `IsSelfA1` predictor.
-The plots also showed that this predictor is important to include in the model: while the two components `IsA1` and `IsSelf` by themselves predict an increase or no change in pupil dilation relative to the reference condition, the interaction of these components actually makes the opposite prediction: pupil dilation  *decreases* relative to the reference condition when both are true. It is therefore necessary to include the interaction in the model.
-</div>
-</div>
-
+```{r echo = FALSE}
+question(
+  "What is your conclusion based on the model comparisons, the plots, and the summary statistics?",
+  "The full model uses more degrees of freedom, but has a significantly lower AIC score than the model that leaves out the <code>IsSelfA1</code> predictor.
+The plots also show that this predictor is important to include in the model: while the two components <code>IsA1</code> and <code>IsSelf</code> by themselves predict an increase or no change in pupil dilation relative to the reference condition, the interaction of these components actually makes the opposite prediction: pupil dilation  <i>decreases</i> relative to the reference condition when both are true. It is therefore necessary to include the interaction in the model."
+)
+```
 
 ---
 
