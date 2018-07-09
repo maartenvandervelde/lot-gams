@@ -1,5 +1,5 @@
 ---
-title: 'Assignment: Pupil dilation'
+title: 'LOT 2018 Assignment: Pupil dilation'
 author: "Maarten van der Velde"
 output:
   html_notebook:
@@ -19,6 +19,11 @@ library(htmltools)
 theme_set(theme_classic())
 
 infoMessages("on")
+```
+
+Version information:
+```{r}
+R.version.string
 packageVersion("mgcv")
 packageVersion("itsadug")
 ```
@@ -44,14 +49,13 @@ question <- function(q, a) {
 ```{r}
 download.file("http://www.jacolienvanrij.com/Courses/LOT2018/Assignment/Data/pupilsize_S1.rds", "pupilsize_S1.rds", mode="wb")
 dat <- readRDS('pupilsize_S1.rds')
-```
-```{r}
+
 head(dat)
 str(dat)
 ```
 
 There are four conditions in total: `imageType` (either `self-oriented` or `other-oriented`) is crossed with `introOrder` (either `A1` or `A2`).
-The plot below shows the grand average pupil dilation over time for each of these four conditions. The first noun phrase is always heard at 995 ms after trial onset, while the second NP is presented somewhere between 1585 ms and 2030 ms.
+The plot below shows the grand average pupil dilation over time for each of these four conditions. The first noun phrase (NP1) is always heard at 995 ms after trial onset, while the second NP is presented somewhere between 1585 ms and 2030 ms.
 ```{r}
 # Group observations in 100ms bins based on timestamp, taking the center of each bin as the binned time value.
 dat$Timebin <- timeBins(dat$Time, 100)
@@ -82,10 +86,13 @@ Using binned values rather than raw timestamps makes it possible to average over
 ```{r echo = FALSE}
 question(
   "Inspect the plot. Why would there be such a sudden increase in dilation after 3000 ms? Hint: type <code>tapply(dat$Time, list(dat$Event), max)</code> in the commandline.",
-  "The final pupil measurement happens before 3000 ms in about three quarters of all trials, which strongly suggests that the stimulus may have only been shown for 3000 ms. This would mean that any data after 3000 ms should be disregarded. Since there are only a few observations in each condition after 3000 ms, the mean pupil size is all over the place."
+  "The final pupil measurement happens before 3000 ms in about three quarters of all trials (see summary below), which strongly suggests that the stimulus may have only been shown for 3000 ms, and any data after 3000 ms should be disregarded. Since there are only a few observations in each condition after 3000 ms, the mean pupil size is drawn to individual outliers much more strongly."
 )
 ```
 
+```{r}
+summary(tapply(dat$Time, list(dat$Event), max))
+```
 
 
 ## Baseline model
@@ -97,8 +104,13 @@ nrow(dat)
 ```
 There are about 44,000 observations, which means that `bam()` is the way to go.
 
+Run the model with a nonlinear effect for `Time`:
 ```{r}
-m1 <- bam(Pupil ~ s(Time), data = dat, method = "fREML", discrete = TRUE, nthreads = 8)
+m1 <- bam(Pupil ~ s(Time),
+          data = dat,
+          method = "fREML",
+          discrete = TRUE,
+          nthreads = 8)
 summary(m1)
 ```
 
@@ -106,8 +118,8 @@ summary(m1)
 ```{r echo = FALSE}
 question(
   "Inspect the summary. What does the intercept represent?",
-  "The intercept represents the mean value of the dependent variable, Pupil, when the <code>Time</code> smooth is equal to zero.
-Note that this does not mean 'when <code>Time</code> is equal to zero', since the smooth is centered around zero (as the plot further down shows) and equals zero around 1300 ms."
+  "The intercept represents the mean value of the dependent variable, <code>Pupil</code>, when the <code>Time</code> smooth is equal to zero.
+Note that this does not mean 'when <code>Time</code> itself is equal to zero', since the smooth equals zero when <code>Time</code> is about 1300 ms (as the plot further down shows)."
 )
 ```
 
@@ -125,7 +137,7 @@ question(
 )
 ```
 
-
+Visualise the smooth:
 ```{r}
 par(mfrow=c(1,2), cex=0.75)
 
@@ -149,12 +161,18 @@ question(
 
 Participants differ considerably in pupil dilation size, so the model should account for these differences:
 ```{r}
-boxplot(Pupil ~ Subject, data=dat)
+boxplot(Pupil ~ Subject, data = dat, xlab = "Participant", ylab = "Pupil dilation")
 ```
 
-Add a random intercept for subjects and items:
+Add a random intercept for subjects and items to the model:
 ```{r}
-m2 <- bam(Pupil ~ s(Time) + s(Subject, bs = "re") + s(Item, bs = "re"), data = dat, method = "fREML", discrete = TRUE, nthreads = 8)
+m2 <- bam(Pupil ~ s(Time)
+          + s(Subject, bs = "re")
+          + s(Item, bs = "re"),
+          data = dat,
+          method = "fREML",
+          discrete = TRUE,
+          nthreads = 8)
 summary(m2)
 ```
 
@@ -168,7 +186,7 @@ question(
 ```{r echo = FALSE}
 question(
   "What does a random intercept term represent?",
-  "A random intercept term represents the offset from the fixed intercept for each of its levels."
+  "A random intercept term represents the offset from the fixed intercept for each of its levels (here: for each subject / each item)."
 )
 ```
 
@@ -246,7 +264,7 @@ This offset is the value on the y-axis.
 For example, a y-value of 500 means that the intercept for the corresponding subject/item lies 500 above the overall intercept.
 The x-axis shows where each intercept offset would fall in a normal distribution, expressed in quantiles.
 The assumed normal distribution is indicated with the diagonal line.
-The plots show that the <code>Item</code> random intercepts are normally distributed, but that <code>Subject</code> random intercepts have a few outliers on either side."
+The plots show that the <code>Item</code> random intercepts are roughly normally distributed, but that <code>Subject</code> random intercepts have an outlier on either side."
 )
 ```
 
@@ -312,7 +330,12 @@ Different between subjects: random intercept for <code>Subject</code>."
 
 Instead of random intercepts for `Subject` and `Item`, fit a random factor smooth over time for each:
 ```{r}
-m3 <- bam(Pupil ~ s(Time) + s(Time, Subject, bs = "fs") + s(Time, Item, bs = "fs"), data = dat, method = "fREML", discrete = TRUE, nthreads = 8)
+m3 <- bam(Pupil ~ s(Time)
+          + s(Time, Subject, bs = "fs")
+          + s(Time, Item, bs = "fs"),
+          data = dat, method = "fREML",
+          discrete = TRUE,
+          nthreads = 8)
 summary(m3)
 ```
 
@@ -357,8 +380,7 @@ question(
 
 The middle plot shows the partial effect of the random <code>Time</code> smooth of each of the 10 participants.
 
-The plot on the right shows summed effects: it adds the fixed effects of the intercept and the general <code>Time</code> smooth to the subject-specific <code>Time</code> smooths. 
-The random <code>Time</code> smooth for item 30 is also included in these fitted values."
+The plot on the right shows summed effects for item 30, for each participant: it adds the fixed effects of the intercept and the general <code>Time</code> smooth to the subject-specific <code>Time</code> smooths, and also adds the random <code>Time</code> smooth for item 30."
 )
 ```
 
@@ -386,12 +408,15 @@ Plot fitted effects (shows that variation within subjects is not captured well):
 plot.fitted(m3, 's01', n=10)
 ```
 
-Include a random *intercept* for `Event`:
+Include a random *intercept* for `Event` (unique `Trial` and `Subject` combination):
 ```{r}
 m4 <- bam( Pupil ~ s(Time) 
-           + s(Time, Subject, bs='fs', m=1) 
-           + s(Time, Item, bs='fs', m=1) 
-           + s(Event, bs='re') , data=dat, discrete=TRUE, nthreads = 8)
+           + s(Time, Subject, bs = 'fs', m = 1) 
+           + s(Time, Item, bs = 'fs', m = 1) 
+           + s(Event, bs = 're'),
+           data = dat,
+           discrete = TRUE,
+           nthreads = 8)
 summary(m4)
 ```
 
@@ -424,7 +449,7 @@ plot.fitted(m4, 's01', n=15)
 ```{r echo = FALSE}
 question(
   "Why is it useful to add intercepts for each <code>Event</code> rather than for each <code>Item</code>? Why would the random effects of <code>Subject</code> and <code>Item</code> in many time series data not be sufficient?",
-  "It is clear from the fitted effects plot above that there are sizeable baseline differences in pupil size <i>within</i> participants, which is to be expected as pupil size can fluctuate naturally over a task. A random <code>Subject</code> effect cannot capture this as it is the same for all the subject's trials. Furthermore, in many cases the difference in baseline pupil size is already present at <i>t = 0</i>, meaning that it has little to do with the item itself, and that a random <code>Item</code> effect is therefore ineffective at capturing this variance. The <code>Event</code> intercept can account for these general fluctuations in pupil size that are not consistently tied to a subject or item much better since the intercept is fitted to each trial individually."
+  "It is clear from the fitted effects plot above that there are sizeable baseline differences in pupil size <i>within</i> participants, which is to be expected as pupil size can fluctuate naturally over a task. A random <code>Subject</code> effect cannot capture this as it is the same for all the subject's trials. Furthermore, in many cases the difference in baseline pupil size is already present at <i>t = 0</i>, meaning that it has little to do with the item itself, and that a random <code>Item</code> effect is therefore ineffective at capturing this variance. The <code>Event</code> intercept can account for these general fluctuations in pupil size that are not consistently tied to a subject or item much better since this intercept is fitted to each trial individually."
   )
 ```
 
@@ -455,7 +480,7 @@ question(
   "The QQ-plot checks whether the residuals follow a normal distribution (the assumption of normality).
 The x-axis shows where each residual would fall in a normal distribution, expressed in theoretical quantiles; the y-axis shows to which quantile the residual belongs in the actual distribution.
 The assumed normal distribution is indicated with the diagonal line.
-This means that residuals that conform to the normality assumption would appear as points on or close to the diagonal.
+This means that residuals that conform to the normality assumption would appear as points on (or close to) the diagonal.
 If the points systematically deviate from the diagonal (as they do here), the normality assumption is violated."
 )
 ```
@@ -472,14 +497,14 @@ The same pattern is visible on the right side: there is a heavier right tail tha
 ```{r echo = FALSE}
 question(
   "Shortly describe the ACF: what do the axis represent, and how could an ACF plot be interpreted.",
-  "The ACF plot shows the degree of autocorrelation in the residuals. The height of each line represents the correlation between the residuals and the lagged residuals (residuals shifted by a lag of 1, 2, 3, etc.; shown on the x-axis). We assume the residuals to be independent from one another, in which case the ACF plot would show autocorrelations close to zero. However, if there are regularities in the signal that the model has not explained, the will show up in the residuals, and the autocorrelation will be much higher. Such cases mean the data should be adjusted (more time between samples), the model should be changd to include terms that can explain regularities (e.g. random effects for subjects), or an AR1 model should be included."
+  "The ACF plot shows the degree of autocorrelation in the residuals. The height of each line represents the correlation between the residuals and the lagged residuals (residuals shifted by a lag of 1, 2, 3, etc.; shown on the x-axis). We assume the residuals to be independent from one another, in which case the ACF plot would show autocorrelations close to zero. However, if there are regularities in the signal that the model has not explained, they will carry over to the residuals, and the autocorrelation of the residuals will therefore be much higher. Such cases mean the data should be adjusted (more time between samples will usually reduce autocorrelation), the model should be changed to include terms that can explain regularities (e.g. random effects for subjects), or an AR1 model should be included to account for the autocorrelation."
 )
 ```
 
 ```{r echo = FALSE}
 question(
   "Describe the pattern in the ACF plot. What do you conclude with respect to the independence of the residuals? Is there structure in the residuals?",
-  "In this case, the degree of autocorrelation is extremely high at lag 1 and quite persistent over greater lags. The value of one residual is almost perfectly correlated with the value of the next residual, and still strongly correlated with residuals that are further away. This means that there are strong regularities in the signal that the model has not accounted for, which is not good."
+  "In this case, the value of one residual is almost perfectly correlated with the value of the next residual (lag 1), and still strongly correlated with residuals that are further away. This means that there are strong regularities in the signal that the model has not accounted for, which is not good."
 )
 ```
 
@@ -500,6 +525,7 @@ The AR1 model needs this to delineate events: while it should expect residuals f
 Set `rho` to the autocorrelation at lag 1:
 ```{r}
 rho <- start_value_rho(m4)
+rho
 ```
 
 Rerun the model with the included AR1 model:
@@ -508,7 +534,11 @@ m4b <- bam( Pupil ~ s(Time)
           + s(Time, Subject, bs='fs', m=1) 
           + s(Time, Item, bs='fs', m=1) 
           + s(Event, bs='re') 
-          , data=dat, AR.start=dat$start.event, rho=rho, discrete=TRUE, nthreads = 8)
+          , data=dat,
+          AR.start=dat$start.event,
+          rho=rho,
+          discrete=TRUE,
+          nthreads = 8)
 summary(m4b)
 ```
 
@@ -516,7 +546,7 @@ summary(m4b)
 question(
   "Inspect the summary and the plots to see what has changed in the model.",
   "The summary looks about the same as that of the model without AR1: all predictors are still significant and the amount of variance explained is very similar.
-The smooth terms (see below) also look similar to before. The distribution of the residuals (see below) is still wider than a normal distribution, but the autocorrelation in the residuals has been reduced."
+The smooth terms (see below) also look similar to before. The distribution of the residuals (see below) is still wider than a normal distribution, but (as expected) the autocorrelation in the residuals has been reduced by the addition of the AR1 model."
 )
 ```
 
@@ -621,7 +651,7 @@ summary(m5)
 question(
   "Inspect the summary. What can we conclude about the differences between the four experimental conditions?",
   "Based on the summary alone it is hard to conclude much about the differences between conditions; none of the intercept differences between conditions is significant, and we know that the <code>Time</code> smooth is significantly different from a horizontal line at <i>y = 0</i> in all four conditions, but not how it differs <i>between</i> conditions.
-We can plot the fitted effects for all conditions (see below), but as expected based on the summary they look very similar."
+We can plot the fitted effects for all conditions (see below), but as expected, based on the summary, they look very similar."
 )
 ```
 
@@ -675,21 +705,21 @@ summary(m6)
 ```{r echo = FALSE}
 question(
   "Inspect the summary. What is represented by the intercept?",
-  "The intercept represents the condition in which each of the binary predictors is zero: <i>other-oriented:A2</i>."
+  "The intercept represents the pupil dilation in the condition in which each of the binary predictors is zero (<i>other-oriented:A2</i>) and the <code>Time</code> smooth equals zero, averaged over items, subjects, and individual events."
 )
 ```
 
 ```{r echo = FALSE}
 question(
   "Describe what the four fixed effects trajectories that include Time represent (i.e., the top four lines of the smooth term summary).",
-  "They describe the <code>Time</code> smooth belonging to each of the four conditions. From top to bottom: <i>other-oriented:A2</i>, <i>other-oriented:A1</i>, <i>self-oriented:A2</i>, and <i>self-oriented:A1</i>."
+  "They describe the main effect of the <code>Time</code> smooth belonging to each of the four conditions. From top to bottom: <i>other-oriented:A2</i>, <i>other-oriented:A1</i>, <i>self-oriented:A2</i>, and <i>self-oriented:A1</i>."
 )
 ```
 
 ```{r echo = FALSE}
 question(
   "Why do we not need to include the binary predictors as parametric terms / main effects ( intercept adjustments)?",
-  "It would not make sense to include tem as main effects as we already fit a separate smooth term for each condition and 'turn them on or off' based on the condition (unlike in the previous model, where a single smooth term explicitly captured all differences between conditions)."
+  "It would not make sense to include them as main effects, as we already fit a separate smooth term for each condition and 'turn them on or off' based on the condition (unlike in the previous model, where a single smooth term explicitly captured all differences between conditions)."
 )
 ```
 
@@ -767,7 +797,7 @@ compareML(m6, m6b)
 question(
   "What is your conclusion based on the model comparisons, the plots, and the summary statistics?",
   "The full model uses more degrees of freedom, but has a significantly lower AIC score than the model that leaves out the <code>IsSelfA1</code> predictor.
-The plots also show that this predictor is important to include in the model: while the two components <code>IsA1</code> and <code>IsSelf</code> by themselves predict an increase or no change in pupil dilation relative to the reference condition, the interaction of these components actually makes the opposite prediction: pupil dilation  <i>decreases</i> relative to the reference condition when both are true. It is therefore necessary to include the interaction in the model."
+The plots also show why this predictor is important to include in the model: while the two components <code>IsA1</code> and <code>IsSelf</code> by themselves predict an increase or no change in pupil dilation relative to the reference condition, the interaction of these components actually makes the opposite prediction: pupil dilation <i>decreases</i> relative to the reference condition when both are true. It is therefore necessary to include the interaction in the model."
 )
 ```
 
